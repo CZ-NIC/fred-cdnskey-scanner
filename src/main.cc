@@ -224,8 +224,8 @@ void ResolveHostname::join(Event::Base& _event_base)
     }
     context_ptr_ = new GetDns::Context(_event_base);
     std::list<boost::asio::ip::address> my_dns;
-//    my_dns.push_back(boost::asio::ip::address::from_string("172.16.1.181"));
-    my_dns.push_back(boost::asio::ip::address::from_string("8.8.8.8"));
+    my_dns.push_back(boost::asio::ip::address::from_string("172.16.1.181"));
+//    my_dns.push_back(boost::asio::ip::address::from_string("8.8.8.8"));
     context_ptr_->set_upstream_recursive_servers(my_dns);
     status_ = Status::in_progress;
 }

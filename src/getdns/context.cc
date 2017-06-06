@@ -23,8 +23,6 @@
 
 #include <getdns/getdns_ext_libevent.h>
 
-//#include <iostream>
-
 namespace GetDns
 {
 
@@ -51,12 +49,13 @@ Context::~Context()
         ::getdns_callback_t _on_event)
 {
     Data::Dict extensions;
+#if 0
     Data::set_item_of(
             extensions,
             "dnssec_return_status",
             static_cast< ::uint32_t >(GETDNS_EXTENSION_TRUE));
+#endif
     ::getdns_transaction_t transaction_id;
-//    std::cout << "extension:\n" << extensions << std::endl;
     const ::getdns_return_t retval = ::getdns_address(
             free_on_exit_.context_ptr,
             _hostname.c_str(),
@@ -179,7 +178,7 @@ Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip
         }
     };
     SetResolution::stub(free_on_exit_.context_ptr);
-    this->set_follow_redirects(false);
+//    this->set_follow_redirects(false);
     return *this;
 }
 
