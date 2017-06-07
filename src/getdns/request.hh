@@ -39,6 +39,7 @@ public:
     virtual void on_cancel(::getdns_transaction_t _transaction_id) = 0;
     virtual void on_timeout(::getdns_transaction_t _transaction_id) = 0;
     virtual void on_error(::getdns_transaction_t _transaction_id) = 0;
+    virtual ::getdns_transaction_t get_request_id()const = 0;
 };
 
 }//namespace GetDns
