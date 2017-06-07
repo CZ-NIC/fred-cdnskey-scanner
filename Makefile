@@ -26,7 +26,7 @@ EVENT_DIR := $(BUILD_DIR)/event
 GETDNS_DIR := $(BUILD_DIR)/getdns
 BINARY = $(BUILD_DIR)/cdnskey-scanner
 OBJS := $(BUILD_DIR)/main.o $(EVENT_DIR)/base.o $(GETDNS_DIR)/error.o $(GETDNS_DIR)/data.o \
-$(GETDNS_DIR)/context.o $(GETDNS_DIR)/rrtype.o $(GETDNS_DIR)/solver.o
+$(GETDNS_DIR)/context.o $(GETDNS_DIR)/extensions.o $(GETDNS_DIR)/rrtype.o $(GETDNS_DIR)/solver.o
 DBG_OPT = -ggdb3
 WARN_OPT = -W -Wall
 CFLAGS := -I. $(DBG_OPT) $(WARN_OPT) -O0

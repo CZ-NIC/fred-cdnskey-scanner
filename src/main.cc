@@ -35,7 +35,7 @@
 class ResolveHostname:public GetDns::Request
 {
 public:
-    explicit ResolveHostname();
+    ResolveHostname();
     ~ResolveHostname();
     struct Status
     {
@@ -98,21 +98,85 @@ private:
     Result result_;
 };
 
+class ResolveCdnskey:public GetDns::Request
+{
+public:
+    ResolveCdnskey();
+    ~ResolveCdnskey();
+    struct Status
+    {
+        enum Enum
+        {
+            none,
+            in_progress,
+            completed,
+            cancelled,
+            timed_out,
+            failed
+        };
+    };
+    Status::Enum get_status()const;
+    struct Result
+    {
+        struct Trustiness
+        {
+            enum Enum
+            {
+                insecure,
+                secure,
+                bogus
+            };
+            friend std::ostream& operator<<(std::ostream& out, Enum value)
+            {
+                switch (value)
+                {
+                case insecure: return out << "insecure";
+                case secure: return out << "secure";
+                case bogus: return out << "bogus";
+                }
+                return out << "unknown";
+            }
+        };
+    };
+    Result get_result()const;
+private:
+    GetDns::Context& get_context();
+    void join(Event::Base& _event_base);
+    void on_complete(const GetDns::Data::Dict& _answer, getdns_transaction_t _transaction_id);
+    void on_cancel(getdns_transaction_t _transaction_id);
+    void on_timeout(getdns_transaction_t _transaction_id);
+    void on_error(getdns_transaction_t _transaction_id);
+    GetDns::Context* context_ptr_;
+    Status::Enum status_;
+    Result result_;
+};
+
 int main(int, char* argv[])
 {
     try
     {
         GetDns::Solver solver;
-        GetDns::TransportList tcp_first;
-        tcp_first.push_back(GetDns::Transport::tcp);
-        tcp_first.push_back(GetDns::Transport::udp);
+        GetDns::TransportList tcp_only;
+        tcp_only.push_back(GetDns::Transport::tcp);
+        GetDns::Extensions extensions;
         for (char** arg_ptr = argv + 1; *arg_ptr != NULL; ++arg_ptr)
         {
+#if 0
             const std::string hostname = *arg_ptr;
             solver.add_request_for_address_resolving(
                     hostname,
                     GetDns::RequestPtr(new ResolveHostname),
-                    tcp_first);
+                    tcp_only,
+                    extensions);
+#else
+            const std::string domain = *arg_ptr;
+            solver.add_request_for_cdnskey_resolving(
+                    domain,
+                    GetDns::RequestPtr(new ResolveCdnskey),
+                    tcp_only,
+                    extensions,
+                    boost::asio::ip::address::from_string("172.16.1.181"));
+#endif
         }
         while (0 < solver.get_number_of_unresolved_requests())
         {
@@ -222,11 +286,12 @@ void ResolveHostname::join(Event::Base& _event_base)
         delete context_ptr_;
         context_ptr_ = NULL;
     }
-    context_ptr_ = new GetDns::Context(_event_base);
-    std::list<boost::asio::ip::address> my_dns;
-    my_dns.push_back(boost::asio::ip::address::from_string("172.16.1.181"));
+    context_ptr_ = new GetDns::Context(_event_base, GetDns::Context::InitialSettings::from_os);
+//    std::list<boost::asio::ip::address> my_dns;
+//    my_dns.push_back(boost::asio::ip::address::from_string("172.16.1.181"));
 //    my_dns.push_back(boost::asio::ip::address::from_string("8.8.8.8"));
-    context_ptr_->set_upstream_recursive_servers(my_dns);
+//    context_ptr_->set_upstream_recursive_servers(my_dns);
+    context_ptr_->set_timeout(1000);
     status_ = Status::in_progress;
 }
 
@@ -280,6 +345,89 @@ void ResolveHostname::on_timeout(::getdns_transaction_t)
 }
 
 void ResolveHostname::on_error(::getdns_transaction_t)
+{
+    status_ = Status::failed;
+}
+
+ResolveCdnskey::ResolveCdnskey()
+    : context_ptr_(NULL),
+      status_(Status::none)
+{
+}
+
+ResolveCdnskey::~ResolveCdnskey()
+{
+    if (context_ptr_ != NULL)
+    {
+        delete context_ptr_;
+        context_ptr_ = NULL;
+    }
+}
+
+ResolveCdnskey::Status::Enum ResolveCdnskey::get_status()const
+{
+    return status_;
+}
+
+ResolveCdnskey::Result ResolveCdnskey::get_result()const
+{
+    if (this->get_status() == Status::completed)
+    {
+        return result_;
+    }
+    struct NoResultAvailable:std::runtime_error
+    {
+        NoResultAvailable():std::runtime_error("Request is not completed yet") { }
+    };
+    throw NoResultAvailable();
+}
+
+GetDns::Context& ResolveCdnskey::get_context()
+{
+    if (context_ptr_ != NULL)
+    {
+        return *context_ptr_;
+    }
+    struct NullDereferenceException:std::runtime_error
+    {
+        NullDereferenceException():std::runtime_error("Dereferenced context_ptr_ is NULL") { }
+    };
+    throw NullDereferenceException();
+}
+
+void ResolveCdnskey::join(Event::Base& _event_base)
+{
+    if (context_ptr_ != NULL)
+    {
+        delete context_ptr_;
+        context_ptr_ = NULL;
+    }
+    context_ptr_ = new GetDns::Context(_event_base, GetDns::Context::InitialSettings::from_os);
+//    std::list<boost::asio::ip::address> my_dns;
+//    my_dns.push_back(boost::asio::ip::address::from_string("172.16.1.181"));
+//    my_dns.push_back(boost::asio::ip::address::from_string("8.8.8.8"));
+//    context_ptr_->set_upstream_recursive_servers(my_dns);
+    context_ptr_->set_timeout(1000);
+    status_ = Status::in_progress;
+}
+
+void ResolveCdnskey::on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t)
+{
+    std::cout << _answer << std::endl;
+    status_ = Status::completed;
+}
+
+void ResolveCdnskey::on_cancel(::getdns_transaction_t)
+{
+    status_ = Status::cancelled;
+}
+
+void ResolveCdnskey::on_timeout(::getdns_transaction_t)
+{
+    status_ = Status::timed_out;
+}
+
+void ResolveCdnskey::on_error(::getdns_transaction_t)
 {
     status_ = Status::failed;
 }

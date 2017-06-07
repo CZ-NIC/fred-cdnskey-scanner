@@ -26,7 +26,8 @@
 namespace GetDns
 {
 
-Context::Context(Event::Base& _event_base)
+Context::Context(Event::Base& _event_base, InitialSettings::Enum _initial_settings)
+    : free_on_exit_(_initial_settings)
 {
     const ::getdns_return_t retval = ::getdns_extension_set_libevent_base(free_on_exit_.context_ptr, _event_base.get_base());
     if (retval != ::GETDNS_RETURN_GOOD)
@@ -46,19 +47,41 @@ Context::~Context()
 ::getdns_transaction_t Context::add_request_for_address_resolving(
         const std::string& _hostname,
         void* _user_data_ptr,
-        ::getdns_callback_t _on_event)
+        ::getdns_callback_t _on_event,
+        Extensions _extensions)
 {
-    Data::Dict extensions;
-#if 0
-    Data::set_item_of(
-            extensions,
-            "dnssec_return_status",
-            static_cast< ::uint32_t >(GETDNS_EXTENSION_TRUE));
-#endif
+    Data::Dict extensions = _extensions.into_dictionary();
     ::getdns_transaction_t transaction_id;
     const ::getdns_return_t retval = ::getdns_address(
             free_on_exit_.context_ptr,
             _hostname.c_str(),
+            extensions.get_base_ptr(),
+            _user_data_ptr,
+            &transaction_id,
+            _on_event);
+    if (retval == ::GETDNS_RETURN_GOOD)
+    {
+        return transaction_id;
+    }
+    struct AddressException:Error
+    {
+        explicit AddressException(::getdns_return_t _error_code):Error(_error_code) { }
+    };
+    throw AddressException(retval);
+}
+
+::getdns_transaction_t Context::add_request_for_cdnskey_resolving(
+        const std::string& _domain,
+        void* _user_data_ptr,
+        ::getdns_callback_t _on_event,
+        Extensions _extensions)
+{
+    Data::Dict extensions = _extensions.into_dictionary();
+    ::getdns_transaction_t transaction_id;
+    const ::getdns_return_t retval = ::getdns_general(
+            free_on_exit_.context_ptr,
+            _domain.c_str(),
+            GETDNS_RRTYPE_CDNSKEY,
             extensions.get_base_ptr(),
             _user_data_ptr,
             &transaction_id,
@@ -178,7 +201,6 @@ Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip
         }
     };
     SetResolution::stub(free_on_exit_.context_ptr);
-//    this->set_follow_redirects(false);
     return *this;
 }
 
@@ -198,11 +220,24 @@ Context& Context::set_follow_redirects(bool _yes)
     return *this;
 }
 
-Context::FreeOnExit::FreeOnExit()
+Context& Context::set_timeout(::uint64_t _value_ms)
+{
+    const ::getdns_return_t retval = ::getdns_context_set_timeout(free_on_exit_.context_ptr, _value_ms);
+    if (retval != ::GETDNS_RETURN_GOOD)
+    {
+        struct ContextSetTimeoutFailure:Error
+        {
+            explicit ContextSetTimeoutFailure(getdns_return_t _error_code):Error(_error_code) { }
+        };
+        throw ContextSetTimeoutFailure(retval);
+    }
+    return *this;
+}
+
+Context::FreeOnExit::FreeOnExit(InitialSettings::Enum _initial_settings)
     : context_ptr(NULL)
 {
-    const bool set_from_os = false;
-    const ::getdns_return_t retval = ::getdns_context_create(&context_ptr, set_from_os ? 1 : 0);
+    const ::getdns_return_t retval = ::getdns_context_create(&context_ptr, _initial_settings == InitialSettings::from_os ? 1 : 0);
     if (retval != ::GETDNS_RETURN_GOOD)
     {
         struct ContextCreateException:Error
