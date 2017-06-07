@@ -24,6 +24,7 @@
 
 #include <string>
 #include <set>
+#include <map>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -31,6 +32,26 @@
 #include <cstdlib>
 
 #include <boost/asio/ip/address.hpp>
+
+class DomainsToScanning
+{
+public:
+    DomainsToScanning(std::istream& _data_source);
+    ~DomainsToScanning();
+    typedef std::set<std::string> Nameservers;
+    typedef std::set<std::string> Domains;
+    Nameservers get_nameservers()const;
+    Domains get_domains_of(const std::string& _nameserver)const;
+private:
+    DomainsToScanning& append_data(const char* _data_chunk, std::streamsize _data_chunk_length);
+    void data_finished();
+    typedef std::map<std::string, Domains> DomainsOfNamserver;
+    DomainsOfNamserver domains_of_namserver_;
+    std::string nameserver_;
+    Domains domains_;
+    std::string rest_of_data_;
+    bool data_starts_at_new_line_;
+};
 
 class ResolveHostname:public GetDns::Request
 {
@@ -155,6 +176,21 @@ int main(int, char* argv[])
 {
     try
     {
+        const DomainsToScanning domains_to_scanning(std::cin);
+        const DomainsToScanning::Nameservers nameservers = domains_to_scanning.get_nameservers();
+        for (DomainsToScanning::Nameservers::const_iterator nameserver_itr = nameservers.begin();
+             nameserver_itr != nameservers.end(); ++nameserver_itr)
+        {
+            std::cout << *nameserver_itr;
+            const DomainsToScanning::Domains domains = domains_to_scanning.get_domains_of(*nameserver_itr);
+            for (DomainsToScanning::Domains::const_iterator domain_itr = domains.begin();
+                 domain_itr != domains.end(); ++domain_itr)
+            {
+                std::cout << " " << *domain_itr;
+            }
+            std::cout << std::endl;
+        }
+        return EXIT_SUCCESS;
         GetDns::Solver solver;
         GetDns::TransportList tcp_only;
         tcp_only.push_back(GetDns::Transport::tcp);
@@ -231,6 +267,118 @@ int main(int, char* argv[])
         std::cerr << "caught an unexpected exception" << std::endl;
         return EXIT_FAILURE;
     }
+}
+
+DomainsToScanning::DomainsToScanning(std::istream& _data_source)
+    : data_starts_at_new_line_(true)
+{
+    while (!_data_source.eof())
+    {
+        const bool stdin_is_broken = !std::cin;
+        if (stdin_is_broken)
+        {
+            throw std::runtime_error("stream is broken");
+        }
+        char data_chunk[0x10000];
+        _data_source.read(data_chunk, sizeof(data_chunk));
+        const std::streamsize data_chunk_length = _data_source.gcount();
+        this->append_data(data_chunk, data_chunk_length);
+    }
+    this->data_finished();
+}
+
+DomainsToScanning::~DomainsToScanning()
+{
+}
+
+DomainsToScanning& DomainsToScanning::append_data(const char* _data_chunk, std::streamsize _data_chunk_length)
+{
+    const char* const data_end = _data_chunk + _data_chunk_length;
+    const char* item_begin = _data_chunk;
+    const char* current_pos = _data_chunk;
+    while (current_pos < data_end)
+    {
+        static const char item_delimiter = ' ';
+        static const char line_delimiter = '\n';
+        const bool item_end_reached = *current_pos == item_delimiter;
+        const bool line_end_reached = *current_pos == line_delimiter;
+        const bool some_delimiter_reached = item_end_reached || line_end_reached;
+        if (!some_delimiter_reached)
+        {
+            ++current_pos;
+            continue;
+        }
+        const std::size_t item_length = current_pos - item_begin;
+        const std::string item = rest_of_data_ + std::string(item_begin, item_length);
+        const bool item_is_nameserver = data_starts_at_new_line_;
+        if (item_is_nameserver)
+        {
+            nameserver_ = item;
+            data_starts_at_new_line_ = false;
+        }
+        else
+        {
+            domains_.insert(item);
+        }
+        if (line_end_reached)
+        {
+            if (!nameserver_.empty() && !domains_.empty())
+            {
+                domains_of_namserver_.insert(std::make_pair(nameserver_, domains_));
+            }
+            nameserver_.clear();
+            domains_.clear();
+            data_starts_at_new_line_ = true;
+        }
+        ++current_pos;
+        item_begin = current_pos;
+        rest_of_data_.clear();
+    }
+    const std::size_t rest_of_data_length = current_pos - item_begin;
+    rest_of_data_.append(item_begin, rest_of_data_length);
+    return *this;
+}
+
+void DomainsToScanning::data_finished()
+{
+    const std::string item = rest_of_data_;
+    const bool item_is_nameserver = data_starts_at_new_line_;
+    if (item_is_nameserver)
+    {
+        nameserver_ = item;
+    }
+    else
+    {
+        domains_.insert(item);
+    }
+    if (!nameserver_.empty())
+    {
+        domains_of_namserver_.insert(std::make_pair(nameserver_, domains_));
+        nameserver_.clear();
+        domains_.clear();
+    }
+}
+
+DomainsToScanning::Nameservers DomainsToScanning::get_nameservers()const
+{
+    Nameservers nameservers;
+    for (DomainsOfNamserver::const_iterator nameserver_itr = domains_of_namserver_.begin();
+         nameserver_itr != domains_of_namserver_.end(); ++nameserver_itr)
+    {
+        nameservers.insert(nameserver_itr->first);
+    }
+    return nameservers;
+}
+
+DomainsToScanning::Domains DomainsToScanning::get_domains_of(const std::string& _nameserver)const
+{
+    DomainsOfNamserver::const_iterator nameserver_itr = domains_of_namserver_.find(_nameserver);
+    const bool nameserver_found = nameserver_itr != domains_of_namserver_.end();
+    if (!nameserver_found)
+    {
+        throw std::runtime_error("nameserver not found");
+    }
+    return nameserver_itr->second;
 }
 
 ResolveHostname::ResolveHostname()
