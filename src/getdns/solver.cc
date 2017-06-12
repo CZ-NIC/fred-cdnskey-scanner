@@ -52,18 +52,9 @@ Solver::~Solver()
 ::getdns_transaction_t Solver::add_request_for_cdnskey_resolving(
         const std::string& _domain,
         const RequestPtr& _request,
-        const boost::optional<TransportList>& _transport_list,
-        Extensions _extensions,
-        const boost::asio::ip::address& _nameserver)
+        Extensions _extensions)
 {
     _request->join(event_base_);
-    if (_transport_list)
-    {
-        _request->get_context().set_dns_transport_list(*_transport_list);
-    }
-    std::list<boost::asio::ip::address> nameservers;
-    nameservers.push_back(_nameserver);
-    _request->get_context().set_upstream_recursive_servers(nameservers);
     const ::getdns_transaction_t transaction_id =
             _request->get_context().add_request_for_cdnskey_resolving(_domain, this, getdns_callback_function, _extensions);
     active_requests_.insert(std::make_pair(transaction_id, _request));

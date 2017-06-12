@@ -1,2 +1,2 @@
-ns-r-01.test.nic.cz a-t19041.cz b-t19041.cz c-t19041.cz d-t19041.cz e-t19041.cz f-t19041.cz
-ns-r-02.test.nic.cz c-t19041.cz d-t19041.cz e-t19041.cz f-t19041.cz
+ns-r-01.test.nic.cz S:a-t19041.cz S:b-t19041.cz S:c-t19041.cz S:d-t19041.cz U:e-t19041.cz U:f-t19041.cz
+ns-r-02.test.nic.cz S:c-t19041.cz S:d-t19041.cz U:e-t19041.cz U:f-t19041.cz

@@ -20,6 +20,7 @@
 #define CONTEXT_HH_0C2292206DE22FFE81940C3E7D4DE456
 
 #include "src/event/base.hh"
+#include "src/getdns/data.hh"
 #include "src/getdns/transport.hh"
 #include "src/getdns/extensions.hh"
 
@@ -60,6 +61,7 @@ public:
     Context& set_upstream_recursive_servers(const std::list<boost::asio::ip::address>& _servers);
     Context& set_follow_redirects(bool _yes);
     Context& set_timeout(::uint64_t _value_ms);
+    Context& set_dnssec_trust_anchors(Data::List& _anchors);
 private:
     struct FreeOnExit
     {

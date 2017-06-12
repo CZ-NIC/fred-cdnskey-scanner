@@ -20,7 +20,14 @@
 #include "src/getdns/exception.hh"
 #include "src/getdns/error.hh"
 
+#include <sstream>
+
 #include <boost/variant.hpp>
+#include <boost/archive/iterators/base64_from_binary.hpp>
+#include <boost/archive/iterators/binary_from_base64.hpp>
+#include <boost/archive/iterators/transform_width.hpp>
+#include <boost/archive/iterators/ostream_iterator.hpp>
+#include <boost/algorithm/string.hpp>
 
 namespace GetDns {
 
@@ -180,6 +187,59 @@ Data::LookUpResult::Enum Data::Dict::look_up(const char* _key, Type::Enum _type)
     return LookUpResult::not_found;
 }
 
+Data::Dict Data::Dict::get_trust_anchor(
+        const std::string& _zone,
+        ::uint16_t _flags,
+        ::uint8_t _protocol,
+        ::uint8_t _algorithm,
+         const std::string& _public_key)
+{
+    GetDns::Data::Dict anchor;
+    GetDns::Data::set_item_of(anchor, "class", static_cast< ::uint32_t >(GETDNS_RRCLASS_IN));
+    {
+        class FreeOnExit
+        {
+        public:
+            FreeOnExit(const std::string& _fqdn):bin_(NULL)
+            {
+                const ::getdns_return_t result = ::getdns_convert_fqdn_to_dns_name(_fqdn.c_str(), &bin_);
+                if (result != ::GETDNS_RETURN_GOOD)
+                {
+                    struct ConversionFailure:Error
+                    {
+                        explicit ConversionFailure(::getdns_return_t _error_code):Error(_error_code) { }
+                    };
+                    throw ConversionFailure(result);
+                }
+            }
+            ~FreeOnExit()
+            {
+                if (bin_ != NULL)
+                {
+                    delete bin_->data;
+                    delete bin_;
+                }
+            }
+            const ::getdns_bindata* get_bin_data()const { return const_cast<const ::getdns_bindata*>(bin_); }
+        private:
+            ::getdns_bindata* bin_;
+        } zone(_zone);
+        GetDns::Data::set_item_of(anchor, "name", zone.get_bin_data());
+    }
+    GetDns::Data::set_item_of(anchor, "type", static_cast< ::uint32_t >(GETDNS_RRTYPE_DNSKEY));
+    GetDns::Data::set_item_of(anchor, "ttl", static_cast< ::uint32_t >(172800));
+    GetDns::Data::Dict rdata;
+    GetDns::Data::set_item_of(rdata, "flags", static_cast< ::uint32_t >(_flags));
+    GetDns::Data::set_item_of(rdata, "protocol", static_cast< ::uint32_t >(_protocol));
+    GetDns::Data::set_item_of(rdata, "algorithm", static_cast< ::uint32_t >(_algorithm));
+    ::getdns_bindata public_key;
+    public_key.size = _public_key.size();
+    public_key.data = const_cast< ::uint8_t* >(reinterpret_cast<const ::uint8_t*>(_public_key.data()));
+    GetDns::Data::set_item_of(rdata, "public_key", const_cast<const ::getdns_bindata*>(&public_key));
+    GetDns::Data::set_item_of(anchor, "rdata", const_cast<const GetDns::Data::Dict&>(rdata).get_base_ptr());
+    return anchor;
+}
+
 Data::List::List()
     : base_ptr_(new HolderOfListPtr(::getdns_list_create(), ::getdns_list_destroy)),
       parent_(Empty())
@@ -289,6 +349,71 @@ const Data::List::Base* Data::List::get_base_ptr()const
 Data::List::Base* Data::List::get_base_ptr()
 {
     return base_ptr_->ptr;
+}
+
+Data::List Data::List::get_root_trust_anchor(::time_t& _utc_date_of_anchor)
+{
+    return List(::getdns_root_trust_anchor(&_utc_date_of_anchor));
+}
+
+namespace {
+
+std::string remove_the_base64_padding_characters(const std::string& _with_paddings)
+{
+    const int are_the_same = 0;
+    if (2 <= _with_paddings.length())
+    {
+        if (_with_paddings.compare(_with_paddings.length() - 2, 2, "==") == are_the_same)
+        {
+            return _with_paddings.substr(0, _with_paddings.length() - 2);
+        }
+    }
+    if (1 <= _with_paddings.length())
+    {
+        if (_with_paddings.compare(_with_paddings.length() - 1, 1, "=") == are_the_same)
+        {
+            return _with_paddings.substr(0, _with_paddings.length() - 1);
+        }
+    }
+    return _with_paddings;
+}
+
+}//namespace GetDns::{anonymous}
+
+std::string Data::base64_decode(const std::string& _base64_encoded_text)
+{
+    namespace bai = boost::archive::iterators;
+    typedef bai::transform_width<bai::binary_from_base64<const char *>, 8, 6> Base64Decode;
+
+    const std::string without_paddings = remove_the_base64_padding_characters(_base64_encoded_text);
+    std::ostringstream decoded_bin_data;
+
+    std::copy(Base64Decode(without_paddings.data()),
+              Base64Decode(without_paddings.data() + without_paddings.size()),
+              std::ostream_iterator<char>(decoded_bin_data));
+    return decoded_bin_data.str();
+}
+
+std::string Data::base64_encode(const std::string& _binary_data)
+{
+    typedef boost::archive::iterators::base64_from_binary<
+                boost::archive::iterators::transform_width<const char*, 6, 8> > Base64Encode;
+    std::ostringstream base64_encoded_text;
+    std::copy(Base64Encode(_binary_data.data()),
+              Base64Encode(_binary_data.data() + _binary_data.size()),
+              std::ostream_iterator<char>(base64_encoded_text));
+    switch (_binary_data.size() % 3)
+    {
+        case 0:
+            break;
+        case 1:
+            base64_encoded_text << "==";
+            break;
+        case 2:
+            base64_encoded_text << "=";
+            break;
+    }
+    return base64_encoded_text.str();
 }
 
 namespace {
@@ -668,6 +793,24 @@ struct SetItem<Data::Dict::SharedBasePtr, const char*, const ::getdns_dict*>
 };
 
 template <>
+struct SetItem<Data::Dict::SharedBasePtr, const char*, const ::getdns_list*>
+{
+    static void into(Data::Dict::SharedBasePtr& _dst, const char* _key, const ::getdns_list* _value)
+    {
+        const ::getdns_return_t result = ::getdns_dict_set_list(_dst->ptr, _key, _value);
+        if (result == ::GETDNS_RETURN_GOOD)
+        {
+            return;
+        }
+        struct DictSetItemFailure:Error
+        {
+            explicit DictSetItemFailure(::getdns_return_t _error_code):Error(_error_code) { }
+        };
+        throw DictSetItemFailure(result);
+    }
+};
+
+template <>
 struct SetItem<Data::Dict::SharedBasePtr, const char*, const char*>
 {
     static void into(Data::Dict::SharedBasePtr& _dst, const char* _key, const char* _value)
@@ -752,6 +895,7 @@ template Data::Value Data::get<Data::Fqdn, Data::List, ::size_t>(const Data::Lis
 template Data::Dict& Data::set_item_of<Data::Dict, const char*, ::uint32_t>(Data::Dict&, const char*, ::uint32_t);
 template Data::Dict& Data::set_item_of<Data::Dict, const char*, const ::getdns_bindata*>(Data::Dict&, const char*, const ::getdns_bindata*);
 template Data::Dict& Data::set_item_of<Data::Dict, const char*, const ::getdns_dict*>(Data::Dict&, const char*, const ::getdns_dict*);
+template Data::Dict& Data::set_item_of<Data::Dict, const char*, const ::getdns_list*>(Data::Dict&, const char*, const ::getdns_list*);
 template Data::Dict& Data::set_item_of<Data::Dict, const char*, const char*>(Data::Dict&, const char*, const char*);
 
 template Data::List& Data::set_item_of<Data::List, ::size_t, const ::getdns_dict*>(Data::List&, ::size_t, const ::getdns_dict*);

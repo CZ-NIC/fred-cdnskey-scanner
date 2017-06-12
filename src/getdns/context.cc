@@ -136,7 +136,7 @@ Context& Context::set_dns_transport_list(const TransportList& _transport_list)
     {
         struct ContextSetDnsTransportListException:Error
         {
-            explicit ContextSetDnsTransportListException(getdns_return_t _error_code):Error(_error_code) { }
+            explicit ContextSetDnsTransportListException(::getdns_return_t _error_code):Error(_error_code) { }
         };
         throw ContextSetDnsTransportListException(retval);
     }
@@ -179,7 +179,7 @@ Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip
     {
         struct ContextSetUpstreamRecursiveServersFailure:Error
         {
-            explicit ContextSetUpstreamRecursiveServersFailure(getdns_return_t _error_code):Error(_error_code) { }
+            explicit ContextSetUpstreamRecursiveServersFailure(::getdns_return_t _error_code):Error(_error_code) { }
         };
         throw ContextSetUpstreamRecursiveServersFailure(retval);
     }
@@ -194,7 +194,7 @@ Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip
             {
                 struct ContextSetResolutionStubFailure:Error
                 {
-                    explicit ContextSetResolutionStubFailure(getdns_return_t _error_code):Error(_error_code) { }
+                    explicit ContextSetResolutionStubFailure(::getdns_return_t _error_code):Error(_error_code) { }
                 };
                 throw ContextSetResolutionStubFailure(retval);
             }
@@ -213,7 +213,7 @@ Context& Context::set_follow_redirects(bool _yes)
     {
         struct ContextSetFollowRedirectsFailure:Error
         {
-            explicit ContextSetFollowRedirectsFailure(getdns_return_t _error_code):Error(_error_code) { }
+            explicit ContextSetFollowRedirectsFailure(::getdns_return_t _error_code):Error(_error_code) { }
         };
         throw ContextSetFollowRedirectsFailure(retval);
     }
@@ -227,9 +227,25 @@ Context& Context::set_timeout(::uint64_t _value_ms)
     {
         struct ContextSetTimeoutFailure:Error
         {
-            explicit ContextSetTimeoutFailure(getdns_return_t _error_code):Error(_error_code) { }
+            explicit ContextSetTimeoutFailure(::getdns_return_t _error_code):Error(_error_code) { }
         };
         throw ContextSetTimeoutFailure(retval);
+    }
+    return *this;
+}
+
+Context& Context::set_dnssec_trust_anchors(Data::List& _anchors)
+{
+    const ::getdns_return_t retval = ::getdns_context_set_dnssec_trust_anchors(
+            free_on_exit_.context_ptr,
+            _anchors.get_base_ptr());
+    if (retval != ::GETDNS_RETURN_GOOD)
+    {
+        struct ContextSetDnssecTrustAnchorsFailure:Error
+        {
+            explicit ContextSetDnssecTrustAnchorsFailure(::getdns_return_t _error_code):Error(_error_code) { }
+        };
+        throw ContextSetDnssecTrustAnchorsFailure(retval);
     }
     return *this;
 }
@@ -242,7 +258,7 @@ Context::FreeOnExit::FreeOnExit(InitialSettings::Enum _initial_settings)
     {
         struct ContextCreateException:Error
         {
-            explicit ContextCreateException(getdns_return_t _error_code):Error(_error_code) { }
+            explicit ContextCreateException(::getdns_return_t _error_code):Error(_error_code) { }
         };
         throw ContextCreateException(retval);
     }

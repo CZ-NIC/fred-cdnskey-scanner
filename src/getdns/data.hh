@@ -93,6 +93,12 @@ struct Data
         Base* get_base_ptr();
         const Base* get_base_ptr()const;
         LookUpResult::Enum look_up(const char* _key, Type::Enum _type)const;
+        static Dict get_trust_anchor(
+                const std::string& _zone,
+                ::uint16_t _flags,
+                ::uint8_t _protocol,
+                ::uint8_t _algorithm,
+                 const std::string& _public_key);
         friend std::ostream& operator<<(std::ostream& out, const Dict& data) { return out << data.get_pretty_string(); }
     private:
         explicit Dict(Base* _base);
@@ -120,6 +126,7 @@ struct Data
         LookUpResult::Enum look_up(::size_t _index, Type::Enum _type)const;
         const Base* get_base_ptr()const;
         Base* get_base_ptr();
+        static List get_root_trust_anchor(::time_t& _utc_date_of_anchor);
     private:
         explicit List(Base* _base);
         List(Base* _base, const boost::shared_ptr<HolderOfDictPtr>& _parent);
@@ -173,6 +180,8 @@ struct Data
     };
     template <class R, class S, class K>
     static Value get(const S& _src, K _index);
+    static std::string base64_decode(const std::string& _base64_encoded_text);
+    static std::string base64_encode(const std::string& _binary_data);
 };
 
 }//namespace GetDns
