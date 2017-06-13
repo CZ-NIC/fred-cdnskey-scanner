@@ -234,11 +234,22 @@ Context& Context::set_timeout(::uint64_t _value_ms)
     return *this;
 }
 
-Context& Context::set_dnssec_trust_anchors(Data::List& _anchors)
+Context& Context::set_dnssec_trust_anchors(const std::list<Data::TrustAnchor>& _anchors)
 {
+    Data::List anchors;
+    for (std::list<Data::TrustAnchor>::const_iterator anchor_itr = _anchors.begin(); anchor_itr != _anchors.end(); ++anchor_itr)
+    {
+        const Data::Dict anchor = Data::Dict::get_trust_anchor(
+                anchor_itr->zone,
+                anchor_itr->flags,
+                anchor_itr->protocol,
+                anchor_itr->algorithm,
+                anchor_itr->public_key);
+        Data::set_item_of(anchors, anchors.get_number_of_items(), anchor.get_base_ptr());
+    }
     const ::getdns_return_t retval = ::getdns_context_set_dnssec_trust_anchors(
             free_on_exit_.context_ptr,
-            _anchors.get_base_ptr());
+            anchors.get_base_ptr());
     if (retval != ::GETDNS_RETURN_GOOD)
     {
         struct ContextSetDnssecTrustAnchorsFailure:Error

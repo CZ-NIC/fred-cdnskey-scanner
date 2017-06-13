@@ -26,6 +26,7 @@
 #include <string>
 #include <set>
 #include <map>
+#include <list>
 #include <vector>
 #include <iostream>
 #include <sstream>
@@ -39,6 +40,8 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+
+namespace {
 
 typedef std::set<std::string> Nameservers;
 typedef std::set<std::string> Domains;
@@ -71,12 +74,19 @@ struct DomainNameserverAddress
 };
 
 typedef std::vector<DomainNameserverAddress> VectorOfDomainNameserverAddress;
-void prepare_task(const DomainsToScanning& input, GetDns::Solver& solver, VectorOfDomainNameserverAddress& result);
+void prepare_task(
+        const DomainsToScanning& input,
+        GetDns::Solver& solver,
+        VectorOfDomainNameserverAddress& result,
+        const boost::optional<GetDns::TransportList>& transport_list,
+        const std::list<boost::asio::ip::address>& resolvers);
 
 class ResolveHostname:public GetDns::Request
 {
 public:
-    ResolveHostname();
+    ResolveHostname(
+            const boost::optional<GetDns::TransportList>& _transport_list,
+            const std::list<boost::asio::ip::address>& _resolvers);
     ~ResolveHostname();
     struct Status
     {
@@ -135,6 +145,8 @@ private:
     void on_cancel(::getdns_transaction_t _transaction_id);
     void on_timeout(::getdns_transaction_t _transaction_id);
     void on_error(::getdns_transaction_t _transaction_id);
+    const boost::optional<GetDns::TransportList> transport_list_;
+    const std::list<boost::asio::ip::address> resolvers_;
     GetDns::Context* context_ptr_;
     Status::Enum status_;
     Result result_;
@@ -223,7 +235,8 @@ class ResolveCdnskeySigned:public GetDns::Request
 public:
     ResolveCdnskeySigned(
             const boost::optional<GetDns::TransportList>& _transport_list,
-            const GetDns::Data::List& _trust_anchors);
+            const std::list<boost::asio::ip::address>& _resolvers,
+            const std::list<GetDns::Data::TrustAnchor>& _trust_anchors);
     ~ResolveCdnskeySigned();
     struct Status
     {
@@ -232,6 +245,7 @@ public:
             none,
             in_progress,
             completed,
+            untrustworthy_answer,
             cancelled,
             timed_out,
             failed
@@ -240,26 +254,6 @@ public:
     Status::Enum get_status()const;
     struct Result
     {
-        struct Trustiness
-        {
-            enum Enum
-            {
-                insecure,
-                secure,
-                bogus
-            };
-            friend std::ostream& operator<<(std::ostream& out, Enum value)
-            {
-                switch (value)
-                {
-                    case insecure: return out << "insecure";
-                    case secure: return out << "secure";
-                    case bogus: return out << "bogus";
-                }
-                return out << "unknown";
-            }
-        };
-        Trustiness::Enum trustiness;
         Cdnskey cdnskey;
     };
     const Result& get_result()const;
@@ -272,7 +266,8 @@ private:
     void on_timeout(getdns_transaction_t _transaction_id);
     void on_error(getdns_transaction_t _transaction_id);
     const boost::optional<GetDns::TransportList> transport_list_;
-    GetDns::Data::List trust_anchors_;
+    const std::list<boost::asio::ip::address> resolvers_;
+    const std::list<GetDns::Data::TrustAnchor> trust_anchors_;
     GetDns::Context* context_ptr_;
     Status::Enum status_;
     Result result_;
@@ -281,13 +276,11 @@ private:
 
 const int max_number_of_unresolved_queries = 2;
 
-namespace {
-
 template <class T>
 T split(const std::string& src, const std::string& delimiters, void(*append)(const std::string& item, T& container));
 
-void append_ip_address(const std::string& item, std::vector<boost::asio::ip::address>& addresses);
-void append_trust_anchor(const std::string& item, GetDns::Data::List& anchors);
+void append_ip_address(const std::string& item, std::list<boost::asio::ip::address>& addresses);
+void append_trust_anchor(const std::string& item, std::list<GetDns::Data::TrustAnchor>& anchors);
 
 }//namespace {anonymous}
 
@@ -370,27 +363,9 @@ int main(int, char* argv[])
             return EXIT_FAILURE;
         }
     }
-    if (!hostname_resolvers_opt.empty())
-    {
-        const std::vector<boost::asio::ip::address> addresses = split(hostname_resolvers_opt, ",", append_ip_address);
-        for (std::vector<boost::asio::ip::address>::const_iterator addr_itr = addresses.begin(); addr_itr != addresses.end(); ++addr_itr)
-        {
-            std::cout << "addr: " << *addr_itr << std::endl;
-        }
-    }
-    if (!cdnskey_resolvers_opt.empty())
-    {
-        const std::vector<boost::asio::ip::address> addresses = split(cdnskey_resolvers_opt, ",", append_ip_address);
-        for (std::vector<boost::asio::ip::address>::const_iterator addr_itr = addresses.begin(); addr_itr != addresses.end(); ++addr_itr)
-        {
-            std::cout << "addr: " << *addr_itr << std::endl;
-        }
-    }
-    if (!dnssec_trust_anchors_opt.empty())
-    {
-        const GetDns::Data::List anchors = split(dnssec_trust_anchors_opt, ",", append_trust_anchor);
-    }
-    return EXIT_SUCCESS;
+    const std::list<boost::asio::ip::address> hostname_resolvers = split(hostname_resolvers_opt, ",", append_ip_address);
+    const std::list<boost::asio::ip::address> cdnskey_resolvers = split(cdnskey_resolvers_opt, ",", append_ip_address);
+    const std::list<GetDns::Data::TrustAnchor> anchors = split(dnssec_trust_anchors_opt, ",", append_trust_anchor);
     try
     {
         const DomainsToScanning domains_to_scanning(std::cin);
@@ -399,7 +374,7 @@ int main(int, char* argv[])
         tcp_only.push_back(GetDns::Transport::tcp);
         {
             VectorOfDomainNameserverAddress to_resolve;
-            prepare_task(domains_to_scanning, solver, to_resolve);
+            prepare_task(domains_to_scanning, solver, to_resolve, tcp_only, hostname_resolvers);
             typedef std::map< ::getdns_transaction_t, DomainNameserverAddress > Tasks;
             struct Process
             {
@@ -420,14 +395,21 @@ int main(int, char* argv[])
                                     dynamic_cast<const ResolveCdnskeyUnsigned*>(request_ptr);
                             if (cdnskey_resolver_ptr != NULL)
                             {
+                                const DomainNameserverAddress to_resolve = _tasks[cdnskey_resolver_ptr->get_request_id()];
                                 if (cdnskey_resolver_ptr->get_status() == ResolveCdnskeyUnsigned::Status::completed)
                                 {
                                     const ResolveCdnskeyUnsigned::Result result = cdnskey_resolver_ptr->get_result();
-                                    const DomainNameserverAddress to_resolve = _tasks[cdnskey_resolver_ptr->get_request_id()];
-                                    std::cout << to_resolve.nameserver << " "
+                                    std::cout << "insecure " << to_resolve.nameserver << " "
                                               << to_resolve.address << " "
                                               << to_resolve.domain << " "
                                               << result.cdnskey << std::endl;
+                                }
+                                else
+                                {
+                                    const ResolveCdnskeyUnsigned::Result result = cdnskey_resolver_ptr->get_result();
+                                    std::cout << "unresolved " << to_resolve.nameserver << " "
+                                              << to_resolve.address << " "
+                                              << to_resolve.domain << std::endl;
                                 }
                                 _tasks.erase(cdnskey_resolver_ptr->get_request_id());
                             }
@@ -471,12 +453,29 @@ int main(int, char* argv[])
                                     dynamic_cast<const ResolveCdnskeySigned*>(request_ptr);
                             if (cdnskey_resolver_ptr != NULL)
                             {
-                                if (cdnskey_resolver_ptr->get_status() == ResolveCdnskeySigned::Status::completed)
+                                const std::string to_resolve = _tasks[cdnskey_resolver_ptr->get_request_id()];
+                                switch (cdnskey_resolver_ptr->get_status())
                                 {
-                                    const ResolveCdnskeySigned::Result result = cdnskey_resolver_ptr->get_result();
-                                    const std::string to_resolve = _tasks[cdnskey_resolver_ptr->get_request_id()];
-                                    std::cout << to_resolve << " "
-                                              << result.cdnskey << std::endl;
+                                    case ResolveCdnskeySigned::Status::completed:
+                                    {
+                                        const ResolveCdnskeySigned::Result result = cdnskey_resolver_ptr->get_result();
+                                        std::cout << "secure " << to_resolve << " " << result.cdnskey << std::endl;
+                                        break;
+                                    }
+                                    case ResolveCdnskeySigned::Status::untrustworthy_answer:
+                                    {
+                                        std::cout << "untrustworthy " << to_resolve << std::endl;
+                                        break;
+                                    }
+                                    case ResolveCdnskeySigned::Status::cancelled:
+                                    case ResolveCdnskeySigned::Status::failed:
+                                    case ResolveCdnskeySigned::Status::none:
+                                    case ResolveCdnskeySigned::Status::in_progress:
+                                    case ResolveCdnskeySigned::Status::timed_out:
+                                    {
+                                        std::cout << "unknown " << to_resolve << std::endl;
+                                        break;
+                                    }
                                 }
                                 _tasks.erase(cdnskey_resolver_ptr->get_request_id());
                             }
@@ -485,28 +484,15 @@ int main(int, char* argv[])
                 }
             };
             Tasks tasks;
-            GetDns::Data::List anchors;
-            const std::string public_key_bin = GetDns::Data::base64_decode(
-                    "AwEAAdAjHYjqJ6ovPqU+mVFrrvIaqPiQfmNRbv4LX/A0xqcgLZjVC4Mw"
-                    "1bNgU+yvE4J3ICiYk2nKRdYY+9OmKdkb1o7Pl6K7uCq2PiIBFOtj610B"
-                    "+eS7xvhOp9JnXXKcCg/tgkMCAPZ89RczNmQBJtFzjgytjNPNgl2a2ApO"
-                    "KXOVE5xFL6YcWW0p8rPdCnNE2HUQwIJTnxkWf/cLY4gY21TWKIfsE024"
-                    "qXE+8jxbHIFpDzAG5VrnNE0yS2p24ad45IlhHHJI1K076lKOAXRpv7S7"
-                    "HE0JbTx3SxFcNrwRdX3WM/pkFxgBzrTk1bpcWWUbLX3mb5nZPv9v0RQ4"
-                    "qYoo11axAU8=");
-            const GetDns::Data::Dict anchor =
-                    GetDns::Data::Dict::get_trust_anchor(".", 257, 3, 8, public_key_bin);
-            GetDns::Data::set_item_of(anchors, ::size_t(0), const_cast<const GetDns::Data::Dict&>(anchor).get_base_ptr());
-            std::cout << "anchor:\n" << anchor << std::endl;
             GetDns::Extensions extensions;
-            extensions.dnssec_return_status = true;
+//            extensions.dnssec_return_status = true;
 //            extensions.dnssec_return_validation_chain = true;
-//            extensions.dnssec_return_only_secure = true;
+            extensions.dnssec_return_only_secure = true;
             for (Domains::const_iterator item_itr = to_resolve.begin(); item_itr != to_resolve.end(); ++item_itr)
             {
                 const ::getdns_transaction_t task_id = solver.add_request_for_cdnskey_resolving(
                         *item_itr,
-                        GetDns::RequestPtr(new ResolveCdnskeySigned(tcp_only, anchors)),
+                        GetDns::RequestPtr(new ResolveCdnskeySigned(tcp_only, cdnskey_resolvers, anchors)),
                         extensions);
                 tasks.insert(std::make_pair(task_id, *item_itr));
                 Process::resolved_cdnskey(solver, max_number_of_unresolved_queries, tasks);
@@ -541,6 +527,8 @@ int main(int, char* argv[])
         return EXIT_FAILURE;
     }
 }
+
+namespace {
 
 DomainsToScanning::DomainsToScanning(std::istream& _data_source)
     : data_starts_at_new_line_(true)
@@ -704,7 +692,12 @@ struct DomainNameserver
     std::string nameserver;
 };
 
-void prepare_task(const DomainsToScanning& input, GetDns::Solver& solver, VectorOfDomainNameserverAddress& result)
+void prepare_task(
+        const DomainsToScanning& input,
+        GetDns::Solver& solver,
+        VectorOfDomainNameserverAddress& result,
+        const boost::optional<GetDns::TransportList>& transport_list,
+        const std::list<boost::asio::ip::address>& resolvers)
 {
     typedef std::set<boost::asio::ip::address> IpAddresses;
     typedef std::map<std::string, IpAddresses> IpAddressesOfNameservers;
@@ -759,7 +752,7 @@ void prepare_task(const DomainsToScanning& input, GetDns::Solver& solver, Vector
         const std::string nameserver = *nameserver_itr;
         const ::getdns_transaction_t task_id = solver.add_request_for_address_resolving(
                 nameserver,
-                GetDns::RequestPtr(new ResolveHostname),
+                GetDns::RequestPtr(new ResolveHostname(transport_list, resolvers)),
                 tcp_only,
                 extensions);
         tasks.insert(std::make_pair(task_id, nameserver));
@@ -839,8 +832,12 @@ Domains DomainsToScanning::get_unsigned_domains_of(const std::string& _nameserve
     return no_content;
 }
 
-ResolveHostname::ResolveHostname()
-    : context_ptr_(NULL),
+ResolveHostname::ResolveHostname(
+        const boost::optional<GetDns::TransportList>& _transport_list,
+        const std::list<boost::asio::ip::address>& _resolvers)
+    : transport_list_(_transport_list),
+      resolvers_(_resolvers),
+      context_ptr_(NULL),
       status_(Status::none)
 {
 }
@@ -902,9 +899,11 @@ void ResolveHostname::join(Event::Base& _event_base)
         context_ptr_ = NULL;
     }
     context_ptr_ = new GetDns::Context(_event_base, GetDns::Context::InitialSettings::from_os);
-    std::list<boost::asio::ip::address> my_dns;
-    my_dns.push_back(boost::asio::ip::address::from_string("127.0.1.1"));
-    context_ptr_->set_upstream_recursive_servers(my_dns);
+    if (transport_list_)
+    {
+        context_ptr_->set_dns_transport_list(*transport_list_);
+    }
+    context_ptr_->set_upstream_recursive_servers(resolvers_);
     context_ptr_->set_timeout(1000);
     status_ = Status::in_progress;
 }
@@ -1159,13 +1158,14 @@ void ResolveCdnskeyUnsigned::on_error(::getdns_transaction_t _request_id)
 
 ResolveCdnskeySigned::ResolveCdnskeySigned(
         const boost::optional<GetDns::TransportList>& _transport_list,
-        const GetDns::Data::List& _trust_anchors)
+        const std::list<boost::asio::ip::address>& _resolvers,
+        const std::list<GetDns::Data::TrustAnchor>& _trust_anchors)
     : transport_list_(_transport_list),
+      resolvers_(_resolvers),
       trust_anchors_(_trust_anchors),
       context_ptr_(NULL),
       status_(Status::none)
 {
-    result_.trustiness = Result::Trustiness::insecure;
     result_.cdnskey.flags = 0;
     result_.cdnskey.protocol = 0;
     result_.cdnskey.algorithm = 0;
@@ -1228,15 +1228,13 @@ void ResolveCdnskeySigned::join(Event::Base& _event_base)
         context_ptr_ = NULL;
     }
     context_ptr_ = new GetDns::Context(_event_base, GetDns::Context::InitialSettings::from_os);
-    std::list<boost::asio::ip::address> my_dns;
-    my_dns.push_back(boost::asio::ip::address::from_string("172.16.1.183"));
-    context_ptr_->set_upstream_recursive_servers(my_dns);
+    context_ptr_->set_upstream_recursive_servers(resolvers_);
     context_ptr_->set_timeout(3000);
     if (transport_list_)
     {
         context_ptr_->set_dns_transport_list(*transport_list_);
     }
-    if (0 < trust_anchors_.get_number_of_items())
+    if (!trust_anchors_.empty())
     {
         context_ptr_->set_dnssec_trust_anchors(trust_anchors_);
     }
@@ -1246,9 +1244,8 @@ void ResolveCdnskeySigned::join(Event::Base& _event_base)
 void ResolveCdnskeySigned::on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t _request_id)
 {
     request_id_ = _request_id;
-    std::cout << _answer << std::endl;
-    status_ = Status::completed;
-    result_.trustiness = Result::Trustiness::secure;
+//    std::cout << _answer << std::endl;
+    status_ = Status::untrustworthy_answer;
     result_.cdnskey.flags = 0;
     result_.cdnskey.protocol = 0;
     result_.cdnskey.algorithm = 0;
@@ -1323,6 +1320,7 @@ void ResolveCdnskeySigned::on_complete(const GetDns::Data::Dict& _answer, ::getd
                 cdnskey.public_key = GetDns::Data::From(public_key_value).get_value_of<std::string>();
             }
             result_.cdnskey = cdnskey;
+            status_ = Status::completed;
         }
     }
 }
@@ -1348,8 +1346,6 @@ void ResolveCdnskeySigned::on_error(::getdns_transaction_t _request_id)
     status_ = Status::failed;
 }
 
-namespace {
-
 template <class T>
 T split(const std::string& src, const std::string& delimiters, void(*append)(const std::string& item, T& container))
 {
@@ -1364,29 +1360,32 @@ T split(const std::string& src, const std::string& delimiters, void(*append)(con
     return result;
 }
 
-void append_ip_address(const std::string& item, std::vector<boost::asio::ip::address>& addresses)
+void append_ip_address(const std::string& item, std::list<boost::asio::ip::address>& addresses)
 {
     addresses.push_back(boost::asio::ip::address::from_string(item));
 }
 
-void append_trust_anchor(const std::string& item, GetDns::Data::List& anchors)
+void append_trust_anchor(const std::string& item, std::list<GetDns::Data::TrustAnchor>& anchors)
 {
-    std::istringstream dnskey(item);
+    std::istringstream anchor_stream(item);
     std::string zone;
     int flags;
     int protocol;
     int algorithm;
+    std::string public_key;
     std::string base64_encoded_public_key;
-    dnskey >> zone >> flags >> protocol >> algorithm >> base64_encoded_public_key;
-    const GetDns::Data::Dict anchor =
-            GetDns::Data::Dict::get_trust_anchor(
-                    zone,
-                    flags,
-                    protocol,
-                    algorithm,
-                    GetDns::Data::base64_decode(base64_encoded_public_key));
-    std::cout << anchor << std::endl;
-    GetDns::Data::set_item_of(anchors, anchors.get_number_of_items(), anchor.get_base_ptr());
+    anchor_stream >> zone
+                  >> flags
+                  >> protocol
+                  >> algorithm
+                  >> base64_encoded_public_key;
+    GetDns::Data::TrustAnchor trust_anchor;
+    trust_anchor.zone = zone;
+    trust_anchor.flags = flags;
+    trust_anchor.protocol = protocol;
+    trust_anchor.algorithm = algorithm;
+    trust_anchor.public_key = GetDns::Data::base64_decode(base64_encoded_public_key);
+    anchors.push_back(trust_anchor);
 }
 
 }//namespace {anonymous}

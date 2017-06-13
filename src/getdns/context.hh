@@ -61,7 +61,7 @@ public:
     Context& set_upstream_recursive_servers(const std::list<boost::asio::ip::address>& _servers);
     Context& set_follow_redirects(bool _yes);
     Context& set_timeout(::uint64_t _value_ms);
-    Context& set_dnssec_trust_anchors(Data::List& _anchors);
+    Context& set_dnssec_trust_anchors(const std::list<Data::TrustAnchor>& _anchors);
 private:
     struct FreeOnExit
     {

@@ -155,6 +155,14 @@ struct Data
             boost::asio::ip::address,
             NotSet,
             NotRequestedType> Value;
+    struct TrustAnchor
+    {
+        std::string zone;
+        ::uint16_t flags;
+        ::uint8_t protocol;
+        ::uint8_t algorithm;
+        std::string public_key;
+    };
     class Is
     {
     public:
