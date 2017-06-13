@@ -37,6 +37,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 
 typedef std::set<std::string> Nameservers;
@@ -280,50 +281,81 @@ private:
 
 const int max_number_of_unresolved_queries = 2;
 
+namespace {
+
+template <class T>
+T split(const std::string& src, const std::string& delimiters, void(*append)(const std::string& item, T& container));
+
+void append_ip_address(const std::string& item, std::vector<boost::asio::ip::address>& addresses);
+void append_trust_anchor(const std::string& item, GetDns::Data::List& anchors);
+
+}//namespace {anonymous}
+
 int main(int, char* argv[])
 {
-    std::string recursive_servers_opt;
+    std::string hostname_resolvers_opt;
+    std::string cdnskey_resolvers_opt;
     std::string dnssec_trust_anchors_opt;
     for (char** arg_ptr = argv + 1; *arg_ptr != NULL; ++arg_ptr)
     {
         const int are_the_same = 0;
-        if (std::strcmp(*arg_ptr, "--set_upstream_recursive_servers") == are_the_same)
+        if (std::strcmp(*arg_ptr, "--hostname_resolvers") == are_the_same)
         {
-            if (!recursive_servers_opt.empty())
+            if (!hostname_resolvers_opt.empty())
             {
-                std::cerr << "set_upstream_recursive_servers option can be used once only" << std::endl;
+                std::cerr << "hostname_resolvers option can be used once only" << std::endl;
                 return EXIT_FAILURE;
             }
             ++arg_ptr;
             if (*arg_ptr == NULL)
             {
-                std::cerr << "no argument for set_upstream_recursive_servers option" << std::endl;
+                std::cerr << "no argument for hostname_resolvers option" << std::endl;
                 return EXIT_FAILURE;
             }
-            recursive_servers_opt = *arg_ptr;
-            if (recursive_servers_opt.empty())
+            hostname_resolvers_opt = *arg_ptr;
+            if (hostname_resolvers_opt.empty())
             {
-                std::cerr << "set_upstream_recursive_servers argument can not be empty" << std::endl;
+                std::cerr << "hostname_resolvers argument can not be empty" << std::endl;
                 return EXIT_FAILURE;
             }
         }
-        else if (std::strcmp(*arg_ptr, "--set_dnssec_trust_anchors") == are_the_same)
+        else if (std::strcmp(*arg_ptr, "--cdnskey_resolvers") == are_the_same)
         {
-            if (!dnssec_trust_anchors_opt.empty())
+            if (!cdnskey_resolvers_opt.empty())
             {
-                std::cerr << "set_dnssec_trust_anchors option can be used once only" << std::endl;
+                std::cerr << "cdnskey_resolvers option can be used once only" << std::endl;
                 return EXIT_FAILURE;
             }
             ++arg_ptr;
             if (*arg_ptr == NULL)
             {
-                std::cerr << "no argument for set_dnssec_trust_anchors option" << std::endl;
+                std::cerr << "no argument for cdnskey_resolvers option" << std::endl;
+                return EXIT_FAILURE;
+            }
+            cdnskey_resolvers_opt = *arg_ptr;
+            if (cdnskey_resolvers_opt.empty())
+            {
+                std::cerr << "cdnskey_resolvers argument can not be empty" << std::endl;
+                return EXIT_FAILURE;
+            }
+        }
+        else if (std::strcmp(*arg_ptr, "--dnssec_trust_anchors") == are_the_same)
+        {
+            if (!dnssec_trust_anchors_opt.empty())
+            {
+                std::cerr << "dnssec_trust_anchors option can be used once only" << std::endl;
+                return EXIT_FAILURE;
+            }
+            ++arg_ptr;
+            if (*arg_ptr == NULL)
+            {
+                std::cerr << "no argument for dnssec_trust_anchors option" << std::endl;
                 return EXIT_FAILURE;
             }
             dnssec_trust_anchors_opt = *arg_ptr;
             if (dnssec_trust_anchors_opt.empty())
             {
-                std::cerr << "set_dnssec_trust_anchors argument can not be empty" << std::endl;
+                std::cerr << "dnssec_trust_anchors argument can not be empty" << std::endl;
                 return EXIT_FAILURE;
             }
         }
@@ -338,15 +370,25 @@ int main(int, char* argv[])
             return EXIT_FAILURE;
         }
     }
-    if (!recursive_servers_opt.empty())
+    if (!hostname_resolvers_opt.empty())
     {
-        std::cout << recursive_servers_opt << std::endl;
-        std::vector<std::string> addresses;
-        boost::algorithm::split(addresses, recursive_servers_opt, )
+        const std::vector<boost::asio::ip::address> addresses = split(hostname_resolvers_opt, ",", append_ip_address);
+        for (std::vector<boost::asio::ip::address>::const_iterator addr_itr = addresses.begin(); addr_itr != addresses.end(); ++addr_itr)
+        {
+            std::cout << "addr: " << *addr_itr << std::endl;
+        }
+    }
+    if (!cdnskey_resolvers_opt.empty())
+    {
+        const std::vector<boost::asio::ip::address> addresses = split(cdnskey_resolvers_opt, ",", append_ip_address);
+        for (std::vector<boost::asio::ip::address>::const_iterator addr_itr = addresses.begin(); addr_itr != addresses.end(); ++addr_itr)
+        {
+            std::cout << "addr: " << *addr_itr << std::endl;
+        }
     }
     if (!dnssec_trust_anchors_opt.empty())
     {
-        std::cout << dnssec_trust_anchors_opt << std::endl;
+        const GetDns::Data::List anchors = split(dnssec_trust_anchors_opt, ",", append_trust_anchor);
     }
     return EXIT_SUCCESS;
     try
@@ -1305,3 +1347,46 @@ void ResolveCdnskeySigned::on_error(::getdns_transaction_t _request_id)
     std::cout << "failed" << std::endl;
     status_ = Status::failed;
 }
+
+namespace {
+
+template <class T>
+T split(const std::string& src, const std::string& delimiters, void(*append)(const std::string& item, T& container))
+{
+    std::vector<std::string> vector_of_items;
+    boost::algorithm::split(vector_of_items, src, boost::algorithm::is_any_of(delimiters));
+    T result;
+    for (std::vector<std::string>::const_iterator item_itr = vector_of_items.begin();
+            item_itr != vector_of_items.end(); ++item_itr)
+    {
+        append(*item_itr, result);
+    }
+    return result;
+}
+
+void append_ip_address(const std::string& item, std::vector<boost::asio::ip::address>& addresses)
+{
+    addresses.push_back(boost::asio::ip::address::from_string(item));
+}
+
+void append_trust_anchor(const std::string& item, GetDns::Data::List& anchors)
+{
+    std::istringstream dnskey(item);
+    std::string zone;
+    int flags;
+    int protocol;
+    int algorithm;
+    std::string base64_encoded_public_key;
+    dnskey >> zone >> flags >> protocol >> algorithm >> base64_encoded_public_key;
+    const GetDns::Data::Dict anchor =
+            GetDns::Data::Dict::get_trust_anchor(
+                    zone,
+                    flags,
+                    protocol,
+                    algorithm,
+                    GetDns::Data::base64_decode(base64_encoded_public_key));
+    std::cout << anchor << std::endl;
+    GetDns::Data::set_item_of(anchors, anchors.get_number_of_items(), anchor.get_base_ptr());
+}
+
+}//namespace {anonymous}

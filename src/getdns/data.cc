@@ -200,7 +200,8 @@ Data::Dict Data::Dict::get_trust_anchor(
         class FreeOnExit
         {
         public:
-            FreeOnExit(const std::string& _fqdn):bin_(NULL)
+            FreeOnExit(const std::string& _fqdn)
+                : bin_(NULL)
             {
                 const ::getdns_return_t result = ::getdns_convert_fqdn_to_dns_name(_fqdn.c_str(), &bin_);
                 if (result != ::GETDNS_RETURN_GOOD)
@@ -216,8 +217,8 @@ Data::Dict Data::Dict::get_trust_anchor(
             {
                 if (bin_ != NULL)
                 {
-                    delete bin_->data;
-                    delete bin_;
+                    ::free(bin_->data);
+                    ::free(bin_);
                 }
             }
             const ::getdns_bindata* get_bin_data()const { return const_cast<const ::getdns_bindata*>(bin_); }
