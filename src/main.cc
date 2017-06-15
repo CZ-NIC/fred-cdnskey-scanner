@@ -415,14 +415,14 @@ int main(int, char* argv[])
         std::cerr << "runtime value has to be set" << std::endl;
         return EXIT_FAILURE;
     }
-    const ::uint64_t runtime = boost::lexical_cast< ::uint64_t >(runtime_opt);
-    const std::list<boost::asio::ip::address> hostname_resolvers = split(hostname_resolvers_opt, ",", append_ip_address);
-    const std::list<boost::asio::ip::address> cdnskey_resolvers = split(cdnskey_resolvers_opt, ",", append_ip_address);
-    const std::list<GetDns::Data::TrustAnchor> anchors = split(dnssec_trust_anchors_opt, ",", append_trust_anchor);
-    const ::uint64_t timeout_default = 10;
-    const ::uint64_t timeout = timeout_opt.empty() ? timeout_default : boost::lexical_cast< ::uint64_t >(timeout_opt);
     try
     {
+        const ::uint64_t runtime = boost::lexical_cast< ::uint64_t >(runtime_opt);
+        const std::list<boost::asio::ip::address> hostname_resolvers = split(hostname_resolvers_opt, ",", append_ip_address);
+        const std::list<boost::asio::ip::address> cdnskey_resolvers = split(cdnskey_resolvers_opt, ",", append_ip_address);
+        const std::list<GetDns::Data::TrustAnchor> anchors = split(dnssec_trust_anchors_opt, ",", append_trust_anchor);
+        const ::uint64_t timeout_default = 10;
+        const ::uint64_t timeout = timeout_opt.empty() ? timeout_default : boost::lexical_cast< ::uint64_t >(timeout_opt);
         const DomainsToScanning domains_to_scanning(std::cin);
         GetDns::Solver solver;
         GetDns::TransportList tcp_only;
@@ -1422,6 +1422,10 @@ void ResolveCdnskeySigned::on_error(::getdns_transaction_t _request_id)
 template <class T>
 T split(const std::string& src, const std::string& delimiters, void(*append)(const std::string& item, T& container))
 {
+    if (src.empty())
+    {
+        return T();
+    }
     std::vector<std::string> vector_of_items;
     boost::algorithm::split(vector_of_items, src, boost::algorithm::is_any_of(delimiters));
     T result;

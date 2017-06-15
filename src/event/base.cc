@@ -22,7 +22,7 @@ namespace Event
 {
 
 Base::Base()
-    : base_(event_base_new())
+    : base_(::event_base_new())
 {
     if (base_ == NULL)
     {
@@ -38,7 +38,7 @@ Base::~Base()
 {
     if (base_ != NULL)
     {
-        event_base_free(base_);
+        ::event_base_free(base_);
         base_ = NULL;
     }
 }
