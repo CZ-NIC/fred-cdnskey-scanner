@@ -907,12 +907,6 @@ HostnameResolver::Result HostnameResolver::get_result(
                         if (query_ptr->get_status() == Query::Status::completed)
                         {
                             const Query::Result addresses = query_ptr->get_result();
-                            std::cerr << nameserver;
-                            for (Query::Result::const_iterator itr = addresses.begin(); itr != addresses.end(); ++itr)
-                            {
-                                std::cerr << " " << *itr;
-                            }
-                            std::cerr << std::endl;
                             result_.insert(std::make_pair(nameserver, addresses));
                         }
                         tasks_.erase(query_ptr->get_request_id());
@@ -1240,7 +1234,6 @@ void InsecureCdnskeyResolver::resolve(
                         }
                         else
                         {
-                            const Query::Result result = query_ptr->get_result();
                             std::cout << "unresolved " << to_resolve.query.nameserver << " "
                                       << to_resolve.answer.address << " "
                                       << to_resolve.query.domain << std::endl;
