@@ -352,9 +352,12 @@ int main(int, char* argv[])
             return EXIT_FAILURE;
         }
         const std::size_t number_of_insecure_queries = insecure_queries.size();
+        std::cerr << "number_of_insecure_queries = " << number_of_insecure_queries << std::endl;
         const std::size_t number_of_secure_queries = domains_to_scanning.get_number_of_secure_domains();
+        std::cerr << "number_of_secure_queries = " << number_of_secure_queries << std::endl;
         const std::size_t total_number_of_queries = number_of_insecure_queries + number_of_secure_queries;
         const double query_distance_nsec = double(time_to_the_end.value) / total_number_of_queries;
+        std::cerr << "query_distance = " << query_distance_nsec << "ns" << std::endl;
         const Nanoseconds time_for_insecure_resolver((query_distance_nsec * number_of_insecure_queries) + 0.5);
         const Nanoseconds time_for_secure_resolver((query_distance_nsec * number_of_secure_queries) + 0.5);
         InsecureCdnskeyResolver::resolve(
@@ -1005,30 +1008,7 @@ public:
     {
         return status_;
     }
-    struct Result
-    {
-        struct Trustiness
-        {
-            enum Enum
-            {
-                insecure,
-                secure,
-                bogus
-            };
-            friend std::ostream& operator<<(std::ostream& out, Enum value)
-            {
-                switch (value)
-                {
-                    case insecure: return out << "insecure";
-                    case secure: return out << "secure";
-                    case bogus: return out << "bogus";
-                }
-                return out << "unknown";
-            }
-        };
-        Trustiness::Enum trustiness;
-        Cdnskey cdnskey;
-    };
+    typedef std::vector<Cdnskey> Result;
     const Result& get_result()const
     {
         if (this->get_status() == Status::completed)
@@ -1083,13 +1063,9 @@ private:
     void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t _request_id)
     {
         request_id_ = _request_id;
-    //    std::cout << _answer << std::endl;
+//        std::cerr << _answer << std::endl;
         status_ = Status::completed;
-        result_.trustiness = Result::Trustiness::insecure;
-        result_.cdnskey.flags = 0;
-        result_.cdnskey.protocol = 0;
-        result_.cdnskey.algorithm = 0;
-        result_.cdnskey.public_key.clear();
+        result_.clear();
         const GetDns::Data::Value replies_tree = GetDns::Data::get<GetDns::Data::List>(_answer, "replies_tree");
         if (!GetDns::Data::Is(replies_tree).of<GetDns::Data::List>().type)
         {
@@ -1159,7 +1135,7 @@ private:
                     }
                     cdnskey.public_key = GetDns::Data::From(public_key_value).get_value_of<std::string>();
                 }
-                result_.cdnskey = cdnskey;
+                result_.push_back(cdnskey);
             }
         }
     }
@@ -1231,10 +1207,22 @@ void InsecureCdnskeyResolver::resolve(
                         if (query_ptr->get_status() == Query::Status::completed)
                         {
                             const Query::Result result = query_ptr->get_result();
-                            std::cout << "insecure " << to_resolve.query.nameserver << " "
-                                      << to_resolve.answer.address << " "
-                                      << to_resolve.query.domain << " "
-                                      << result.cdnskey << std::endl;
+                            if (result.empty())
+                            {
+                                std::cout << "insecure-empty " << to_resolve.query.nameserver << " "
+                                          << to_resolve.answer.address << " "
+                                          << to_resolve.query.domain << std::endl;
+                            }
+                            else
+                            {
+                                for (Query::Result::const_iterator key_itr = result.begin(); key_itr != result.end(); ++key_itr)
+                                {
+                                    std::cout << "insecure " << to_resolve.query.nameserver << " "
+                                              << to_resolve.answer.address << " "
+                                              << to_resolve.query.domain << " "
+                                              << *key_itr << std::endl;
+                                }
+                            }
                         }
                         else
                         {
@@ -1354,7 +1342,7 @@ public:
             }
         };
         Trustiness::Enum trustiness;
-        Cdnskey cdnskey;
+        std::vector<Cdnskey> cdnskeys;
     };
     const Result& get_result()const
     {
@@ -1417,10 +1405,7 @@ private:
         request_id_ = _request_id;
     //    std::cout << _answer << std::endl;
         status_ = Status::untrustworthy_answer;
-        result_.cdnskey.flags = 0;
-        result_.cdnskey.protocol = 0;
-        result_.cdnskey.algorithm = 0;
-        result_.cdnskey.public_key.clear();
+        result_.cdnskeys.clear();
         const GetDns::Data::Value replies_tree = GetDns::Data::get<GetDns::Data::List>(_answer, "replies_tree");
         if (!GetDns::Data::Is(replies_tree).of<GetDns::Data::List>().type)
         {
@@ -1490,10 +1475,10 @@ private:
                     }
                     cdnskey.public_key = GetDns::Data::From(public_key_value).get_value_of<std::string>();
                 }
-                result_.cdnskey = cdnskey;
-                status_ = Status::completed;
+                result_.cdnskeys.push_back(cdnskey);
             }
         }
+        status_ = Status::completed;
     }
     void on_cancel(::getdns_transaction_t _request_id)
     {
@@ -1573,7 +1558,18 @@ void SecureCdnskeyResolver::resolve(
                             case Query::Status::completed:
                             {
                                 const Query::Result result = query_ptr->get_result();
-                                std::cout << "secure " << to_resolve << " " << result.cdnskey << std::endl;
+                                if (result.cdnskeys.empty())
+                                {
+                                    std::cout << "secure-empty " << to_resolve << std::endl;
+                                }
+                                else
+                                {
+                                    for (std::vector<Cdnskey>::const_iterator key_itr = result.cdnskeys.begin();
+                                         key_itr != result.cdnskeys.end(); ++key_itr)
+                                    {
+                                        std::cout << "secure " << to_resolve << " " << *key_itr << std::endl;
+                                    }
+                                }
                                 break;
                             }
                             case Query::Status::untrustworthy_answer:
