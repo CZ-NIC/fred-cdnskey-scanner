@@ -18,6 +18,15 @@
 
 #include "src/event/base.hh"
 
+#include <cerrno>
+#include <cstring>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <iostream>
+
 namespace Event
 {
 
@@ -94,6 +103,97 @@ Base::Result::Enum Base::loop()
 ::event_base* Base::get_base()
 {
     return base_;
+}
+
+namespace
+{
+
+const char dev_null_file[] = "/dev/null";
+
+int get_file_descriptor()
+{
+    const int open_failed = -1;
+    const int fd = ::open(dev_null_file, O_RDONLY);
+    if (fd != open_failed)
+    {
+        return fd;
+    }
+    struct OpenFailure:Exception
+    {
+        OpenFailure(const char* _desc):desc_(_desc) { }
+        const char* what()const throw() { return desc_; }
+        const char* const desc_;
+    };
+    const int c_errno = errno;
+    throw OpenFailure(std::strerror(c_errno));
+}
+
+}//namespace Event::{anonymous}
+
+Timeout::Timeout(Base& _base)
+    : fd_(get_file_descriptor()),
+      event_ptr_(::event_new(_base.get_base(), fd_, EV_TIMEOUT, callback_routine, this))
+{
+}
+
+Timeout::~Timeout()
+{
+    if (event_ptr_ != NULL)
+    {
+        ::event_del(event_ptr_);
+        ::event_free(event_ptr_);
+    }
+    const int invalid_descriptor = -1;
+    if (fd_ != invalid_descriptor)
+    {
+        ::close(fd_);
+    }
+}
+
+Timeout& Timeout::set(::uint64_t _timeout_usec)
+{
+    const int success = 0;
+    struct ::timeval timeout;
+    timeout.tv_sec = _timeout_usec / 1000000;
+    timeout.tv_usec = _timeout_usec % 1000000;
+    const int retval = ::event_add(event_ptr_, &timeout);
+    if (retval == success)
+    {
+        return *this;
+    }
+    struct EventAddFailure:Exception
+    {
+        const char* what()const throw() { return "event_add failed"; }
+    };
+    throw EventAddFailure();
+}
+
+void Timeout::on_event(short _events)
+{
+    if ((_events && EV_TIMEOUT) != 0)
+    {
+        this->on_timeout_occurrence();
+    }
+}
+
+void Timeout::callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr)
+{
+    Timeout* const event_ptr = static_cast<Timeout*>(_user_data_ptr);
+    if ((event_ptr != NULL) && (event_ptr->fd_ == _fd))
+    {
+        try
+        {
+            event_ptr->on_event(_events);
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "Timeout::on_event failed: " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "Timeout::on_event threw unexpected exception" << std::endl;
+        }
+    }
 }
 
 }//namespace Event

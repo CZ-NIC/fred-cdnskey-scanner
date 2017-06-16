@@ -35,14 +35,9 @@ Solver::~Solver()
 ::getdns_transaction_t Solver::add_request_for_address_resolving(
         const std::string& _hostname,
         const RequestPtr& _request,
-        const boost::optional<TransportList>& _transport_list,
         Extensions _extensions)
 {
     _request->join(event_base_);
-    if (_transport_list)
-    {
-        _request->get_context().set_dns_transport_list(*_transport_list);
-    }
     const ::getdns_transaction_t transaction_id =
             _request->get_context().add_request_for_address_resolving(_hostname, this, getdns_callback_function, _extensions);
     active_requests_.insert(std::make_pair(transaction_id, _request));
@@ -87,6 +82,11 @@ Solver::ListOfRequestPtr Solver::pop_finished_requests()
     const ListOfRequestPtr result = finished_requests_;
     finished_requests_.clear();
     return result;
+}
+
+Event::Base& Solver::get_event_base()
+{
+    return event_base_;
 }
 
 void Solver::getdns_callback_function(
