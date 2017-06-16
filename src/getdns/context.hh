@@ -20,7 +20,9 @@
 #define CONTEXT_HH_0C2292206DE22FFE81940C3E7D4DE456
 
 #include "src/event/base.hh"
+#include "src/getdns/data.hh"
 #include "src/getdns/transport.hh"
+#include "src/getdns/extensions.hh"
 
 #include <getdns/getdns.h>
 
@@ -35,19 +37,35 @@ namespace GetDns
 class Context
 {
 public:
-    explicit Context(Event::Base& _event_base);
+    struct InitialSettings
+    {
+        enum Enum
+        {
+            none,
+            from_os,
+        };
+    };
+    Context(Event::Base& _event_base, InitialSettings::Enum _initial_settings);
     ~Context();
     ::getdns_transaction_t add_request_for_address_resolving(
             const std::string& _hostname,
             void* _user_data_ptr,
-            ::getdns_callback_t _on_event);
+            ::getdns_callback_t _on_event,
+            Extensions _extensions);
+    ::getdns_transaction_t add_request_for_cdnskey_resolving(
+            const std::string& _domain,
+            void* _user_data_ptr,
+            ::getdns_callback_t _on_event,
+            Extensions _extensions);
     Context& set_dns_transport_list(const TransportList& _transport_list);
     Context& set_upstream_recursive_servers(const std::list<boost::asio::ip::address>& _servers);
     Context& set_follow_redirects(bool _yes);
+    Context& set_timeout(::uint64_t _value_ms);
+    Context& set_dnssec_trust_anchors(const std::list<Data::TrustAnchor>& _anchors);
 private:
     struct FreeOnExit
     {
-        FreeOnExit();
+        FreeOnExit(InitialSettings::Enum _initial_settings);
         ~FreeOnExit();
         ::getdns_context* context_ptr;
     } free_on_exit_;

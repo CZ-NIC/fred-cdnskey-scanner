@@ -47,6 +47,26 @@ private:
     ::event_base* base_;
 };
 
+class OnTimeout
+{
+protected:
+    virtual ~OnTimeout() { }
+    virtual OnTimeout& on_timeout_occurrence() = 0;
+};
+
+class Timeout:protected OnTimeout
+{
+public:
+    Timeout(Base& _base);
+    ~Timeout();
+    Timeout& set(::uint64_t _timeout_usec);
+private:
+    void on_event(short _events);
+    static void callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr);
+    const int fd_;
+    struct ::event* const event_ptr_;
+};
+
 }//namespace Event
 
 #endif//BASE_HH_32D195DD34FB9368357A0101AA561CD6

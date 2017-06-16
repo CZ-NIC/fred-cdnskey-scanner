@@ -20,8 +20,9 @@
 #define SOLVER_HH_3439EE166EAD8E6EF02E3D57784D4800
 
 #include "src/getdns/solver_fwd.hh"
+#include "src/getdns/data.hh"
 #include "src/getdns/request.hh"
-#include "src/getdns/transport.hh"
+#include "src/getdns/extensions.hh"
 #include "src/event/base.hh"
 
 #include <getdns/getdns.h>
@@ -46,11 +47,16 @@ public:
     ::getdns_transaction_t add_request_for_address_resolving(
             const std::string& _hostname,
             const RequestPtr& _request,
-            const boost::optional<TransportList>& _transport_list);
+            Extensions _extensions);
+    ::getdns_transaction_t add_request_for_cdnskey_resolving(
+            const std::string& _domain,
+            const RequestPtr& _request,
+            Extensions _extensions);
     void do_one_step();
     std::size_t get_number_of_unresolved_requests()const;
     typedef std::list<RequestPtr> ListOfRequestPtr;
     ListOfRequestPtr pop_finished_requests();
+    Event::Base& get_event_base();
 private:
     void clean_finished_requests();
     Event::Base event_base_;
