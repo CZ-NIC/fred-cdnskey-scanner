@@ -330,9 +330,13 @@ int main(int, char* argv[])
         {
             const std::size_t estimated_total_number_of_queries =
                     domains_to_scanning.get_number_of_nameservers() + 2 * domains_to_scanning.get_number_of_domains();
+            std::cerr << "estimated_total_number_of_queries = " << estimated_total_number_of_queries << std::endl;
             const double query_distance = double(runtime.value) / estimated_total_number_of_queries;
+            std::cerr << "query_distance = " << query_distance << std::endl;
             const std::size_t queries_to_ask_now = domains_to_scanning.get_number_of_nameservers();
-            const Nanoseconds time_for_hostname_resolver(Seconds(query_distance * queries_to_ask_now + 0.5));
+            std::cerr << "queries_to_ask_now = " << queries_to_ask_now << std::endl;
+            const Nanoseconds time_for_hostname_resolver(query_distance * queries_to_ask_now * 1000000000LL);
+            std::cerr << "time_for_hostname_resolver = " << time_for_hostname_resolver.value << "ns" << std::endl;
             resolve_hostnames_of_nameservers(
                     domains_to_scanning,
                     query_timeout,
