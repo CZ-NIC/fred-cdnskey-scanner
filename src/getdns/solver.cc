@@ -89,6 +89,8 @@ Event::Base& Solver::get_event_base()
     return event_base_;
 }
 
+extern "C" {
+
 void Solver::getdns_callback_function(
         ::getdns_context*,
         ::getdns_callback_type_t _callback_type,
@@ -96,31 +98,46 @@ void Solver::getdns_callback_function(
         void* _user_data_ptr,
         ::getdns_transaction_t _transaction_id)
 {
-    const Data::Dict answer(_response);
-    Solver* const solver_instance_ptr = reinterpret_cast<Solver*>(_user_data_ptr);
-    RequestId::iterator request_itr = solver_instance_ptr->active_requests_.find(_transaction_id);
-    if (request_itr == solver_instance_ptr->active_requests_.end())
-    {
-        return;
-    }
-
     try
     {
-        switch (_callback_type)
+        Solver* const solver_instance_ptr = reinterpret_cast<Solver*>(_user_data_ptr);
+        RequestId::iterator request_itr = solver_instance_ptr->active_requests_.find(_transaction_id);
+        if (request_itr == solver_instance_ptr->active_requests_.end())
         {
-            case GETDNS_CALLBACK_CANCEL:
-                request_itr->second->on_cancel(_transaction_id);
-                break;
-            case GETDNS_CALLBACK_TIMEOUT:
-                request_itr->second->on_timeout(_transaction_id);
-                break;
-            case GETDNS_CALLBACK_ERROR:
-                request_itr->second->on_error(_transaction_id);
-                break;
-            case GETDNS_CALLBACK_COMPLETE:
-                request_itr->second->on_complete(answer, _transaction_id);
-                break;
+            return;
         }
+
+        try
+        {
+            switch (_callback_type)
+            {
+                case GETDNS_CALLBACK_CANCEL:
+                    request_itr->second->on_cancel(_transaction_id);
+                    break;
+                case GETDNS_CALLBACK_TIMEOUT:
+                    request_itr->second->on_timeout(_transaction_id);
+                    break;
+                case GETDNS_CALLBACK_ERROR:
+                    request_itr->second->on_error(_transaction_id);
+                    break;
+                case GETDNS_CALLBACK_COMPLETE:
+                {
+                    const Data::Dict answer(_response);
+                    request_itr->second->on_complete(answer, _transaction_id);
+                    break;
+                }
+            }
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "std::exception catched: " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "unexpected exception catched" << std::endl;
+        }
+        solver_instance_ptr->finished_requests_.push_back(request_itr->second);
+        solver_instance_ptr->active_requests_.erase(request_itr);
     }
     catch (const std::exception& e)
     {
@@ -130,8 +147,8 @@ void Solver::getdns_callback_function(
     {
         std::cerr << "unexpected exception catched" << std::endl;
     }
-    solver_instance_ptr->finished_requests_.push_back(request_itr->second);
-    solver_instance_ptr->active_requests_.erase(request_itr);
+}
+
 }
 
 }//namespace GetDns

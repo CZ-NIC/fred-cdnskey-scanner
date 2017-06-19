@@ -62,6 +62,7 @@ public:
     Context& set_follow_redirects(bool _yes);
     Context& set_timeout(::uint64_t _value_ms);
     Context& set_dnssec_trust_anchors(const std::list<Data::TrustAnchor>& _anchors);
+    ::getdns_context* release_context();
 private:
     struct FreeOnExit
     {

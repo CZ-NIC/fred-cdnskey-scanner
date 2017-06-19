@@ -261,6 +261,13 @@ Context& Context::set_dnssec_trust_anchors(const std::list<Data::TrustAnchor>& _
     return *this;
 }
 
+::getdns_context* Context::release_context()
+{
+    ::getdns_context* const context_ptr = free_on_exit_.context_ptr;
+    free_on_exit_.context_ptr = NULL;
+    return context_ptr;
+}
+
 Context::FreeOnExit::FreeOnExit(InitialSettings::Enum _initial_settings)
     : context_ptr(NULL)
 {
@@ -277,8 +284,11 @@ Context::FreeOnExit::FreeOnExit(InitialSettings::Enum _initial_settings)
 
 Context::FreeOnExit::~FreeOnExit()
 {
-    ::getdns_context_destroy(context_ptr);
-    context_ptr = NULL;
+    if (context_ptr != NULL)
+    {
+        ::getdns_context_destroy(context_ptr);
+        context_ptr = NULL;
+    }
 }
 
 }//namespace GetDns

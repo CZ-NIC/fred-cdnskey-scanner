@@ -56,7 +56,7 @@ clean:
 
 test: $(BINARY)
 	@$(BINARY) 1 \
---hostname_resolvers "127.0.1.1" \
+--hostname_resolvers "172.20.20.253" \
 --cdnskey_resolvers "172.16.1.183" \
 --dnssec_trust_anchors ". 257 3 8 \
 AwEAAdAjHYjqJ6ovPqU+mVFrrvIaqPiQfmNRbv4LX/A0xqcgL\

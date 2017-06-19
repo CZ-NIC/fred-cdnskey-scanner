@@ -156,6 +156,12 @@ Timeout& Timeout::set(::uint64_t _timeout_usec)
     struct ::timeval timeout;
     timeout.tv_sec = _timeout_usec / 1000000;
     timeout.tv_usec = _timeout_usec % 1000000;
+    const long min_timeout_usec = 4000;
+    const bool timeout_too_short = (timeout.tv_sec <= 0) && (timeout.tv_usec < min_timeout_usec);
+    if (timeout_too_short)
+    {
+        timeout.tv_usec = min_timeout_usec;
+    }
     const int retval = ::event_add(event_ptr_, &timeout);
     if (retval == success)
     {
@@ -166,6 +172,23 @@ Timeout& Timeout::set(::uint64_t _timeout_usec)
         const char* what()const throw() { return "event_add failed"; }
     };
     throw EventAddFailure();
+}
+
+Timeout& Timeout::remove()
+{
+    if (event_ptr_ != NULL)
+    {
+        ::event_del(event_ptr_);
+        ::event_free(event_ptr_);
+        event_ptr_ = NULL;
+    }
+    const int invalid_descriptor = -1;
+    if (fd_ != invalid_descriptor)
+    {
+        ::close(fd_);
+        fd_ = invalid_descriptor;
+    }
+    return *this;
 }
 
 void Timeout::on_event(short _events)

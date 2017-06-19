@@ -60,11 +60,12 @@ public:
     Timeout(Base& _base);
     ~Timeout();
     Timeout& set(::uint64_t _timeout_usec);
+    Timeout& remove();
 private:
     void on_event(short _events);
     static void callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr);
-    const int fd_;
-    struct ::event* const event_ptr_;
+    int fd_;
+    struct ::event* event_ptr_;
 };
 
 }//namespace Event
