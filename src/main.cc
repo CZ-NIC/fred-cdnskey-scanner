@@ -924,11 +924,11 @@ HostnameResolver::Result HostnameResolver::get_result(
                                 const Query::Result addresses = query_ptr->get_result();
                                 if (addresses.empty())
                                 {
-                                    result_.insert(std::make_pair(nameserver, addresses));
+                                    std::cout << "unresolved-ip " << nameserver << std::endl;
                                 }
                                 else
                                 {
-                                    std::cout << "unresolved-ip " << nameserver << std::endl;
+                                    result_.insert(std::make_pair(nameserver, addresses));
                                 }
                                 break;
                             }
