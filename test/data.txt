@@ -3,3 +3,4 @@ a-t19041.cz b-t19041.cz c-t19041.cz d-t19041.cz g-t19041.cz h-t19041.cz
 [insecure]
 ns-r-01.test.nic.cz e-t19041.cz f-t19041.cz
 ns-r-02.test.nic.cz e-t19041.cz f-t19041.cz
+ns2.pipni.cz stolplast.cz

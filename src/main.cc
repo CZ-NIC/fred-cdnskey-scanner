@@ -922,7 +922,14 @@ HostnameResolver::Result HostnameResolver::get_result(
                             case Query::Status::completed:
                             {
                                 const Query::Result addresses = query_ptr->get_result();
-                                result_.insert(std::make_pair(nameserver, addresses));
+                                if (addresses.empty())
+                                {
+                                    result_.insert(std::make_pair(nameserver, addresses));
+                                }
+                                else
+                                {
+                                    std::cout << "unresolved-ip " << nameserver << std::endl;
+                                }
                                 break;
                             }
                             case Query::Status::timed_out:
