@@ -677,10 +677,12 @@ Domains DomainsToScanning::get_unsigned_domains_of(const std::string& _nameserve
 class HostnameResolver::Query:public GetDns::Request
 {
 public:
-    Query(const Seconds& _timeout_sec,
+    Query(const std::string& _hostname,
+          const Seconds& _timeout_sec,
           const boost::optional<GetDns::TransportList>& _transport_list,
           const std::list<boost::asio::ip::address>& _resolvers)
-        : timeout_sec_(_timeout_sec),
+        : hostname_(_hostname),
+          timeout_sec_(_timeout_sec),
           transport_list_(_transport_list),
           resolvers_(_resolvers),
           context_ptr_(NULL),
@@ -723,13 +725,9 @@ public:
         };
         throw NoResultAvailable();
     }
-    ::getdns_transaction_t get_request_id()const
+    const std::string& get_hostname()const
     {
-        if (request_id_)
-        {
-            return *request_id_;
-        }
-        throw std::runtime_error("request_id not set yet");
+        return hostname_;
     }
 private:
     GetDns::Context& get_context()
@@ -763,9 +761,8 @@ private:
         context_ptr_->set_timeout(timeout_sec_.value * 1000);
         status_ = Status::in_progress;
     }
-    void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t _request_id)
+    void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t)
     {
-        request_id_ = _request_id;
         status_ = Status::completed;
         result_.clear();
         const GetDns::Data::Value just_address_answers = GetDns::Data::get<GetDns::Data::List>(_answer, "just_address_answers");
@@ -791,31 +788,25 @@ private:
             result_.insert(GetDns::Data::From(address_data).get_value_of<boost::asio::ip::address>());
         }
     }
-    void on_cancel(::getdns_transaction_t _request_id)
+    void on_cancel(::getdns_transaction_t)
     {
-        std::cerr << __PRETTY_FUNCTION__ << std::endl;
-        request_id_ = _request_id;
         status_ = Status::cancelled;
     }
-    void on_timeout(::getdns_transaction_t _request_id)
+    void on_timeout(::getdns_transaction_t)
     {
-        std::cerr << __PRETTY_FUNCTION__ << std::endl;
-        request_id_ = _request_id;
         status_ = Status::timed_out;
     }
-    void on_error(::getdns_transaction_t _request_id)
+    void on_error(::getdns_transaction_t)
     {
-        std::cerr << __PRETTY_FUNCTION__ << std::endl;
-        request_id_ = _request_id;
         status_ = Status::failed;
     }
+    const std::string hostname_;
     const Seconds timeout_sec_;
     const boost::optional<GetDns::TransportList> transport_list_;
     const std::list<boost::asio::ip::address> resolvers_;
     GetDns::Context* context_ptr_;
     Status::Enum status_;
     Result result_;
-    boost::optional< ::getdns_transaction_t > request_id_;
 };
 
 struct ::timespec get_clock_monotonic()
@@ -904,7 +895,7 @@ HostnameResolver::Result HostnameResolver::get_result(
                     const Query* const query_ptr = dynamic_cast<const Query*>(request_ptr);
                     if (query_ptr != NULL)
                     {
-                        const std::string nameserver = tasks_[query_ptr->get_request_id()];
+                        const std::string nameserver = query_ptr->get_hostname();
                         switch (query_ptr->get_status())
                         {
                             case Query::Status::completed:
@@ -928,7 +919,6 @@ HostnameResolver::Result HostnameResolver::get_result(
                                 std::cout << "unresolved-ip " << nameserver << std::endl;
                                 break;
                         }
-                        tasks_.erase(query_ptr->get_request_id());
                     }
                 }
                 if (remaining_queries_ <= 0)
@@ -945,11 +935,11 @@ HostnameResolver::Result HostnameResolver::get_result(
         {
             if (solver_.get_number_of_unresolved_requests() < max_number_of_unresolved_queries)
             {
-                const ::getdns_transaction_t task_id = solver_.add_request_for_address_resolving(
+                GetDns::RequestPtr request_ptr(new Query(*hostname_ptr_, query_timeout_sec_, transport_list_, resolvers_));
+                solver_.add_request_for_address_resolving(
                         *hostname_ptr_,
-                        GetDns::RequestPtr(new Query(query_timeout_sec_, transport_list_, resolvers_)),
+                        request_ptr,
                         extensions_);
-                tasks_.insert(std::make_pair(task_id, *hostname_ptr_));
                 this->set_time_of_next_query();
                 if (hostname_ptr_ != hostnames_.end())
                 {
@@ -967,14 +957,17 @@ HostnameResolver::Result HostnameResolver::get_result(
         {
             const struct ::timespec now = get_clock_monotonic();
             const Nanoseconds remaining_time_nsec = time_end_ - now;
+            const ::uint64_t min_timeout_usec = 4000;//smaller value exhausts file descriptors :-(
             if (remaining_time_nsec.value <= 0)
             {
-                this->Timeout::set(0);
+                this->Timeout::set(min_timeout_usec);
             }
             else
             {
                 const ::uint64_t the_one_query_time_usec = remaining_time_nsec.value / (1000 * remaining_queries_);
-                this->Timeout::set(the_one_query_time_usec);
+                this->Timeout::set(the_one_query_time_usec < min_timeout_usec
+                                       ? min_timeout_usec
+                                       : the_one_query_time_usec);
             }
             return *this;
         }
@@ -988,8 +981,6 @@ HostnameResolver::Result HostnameResolver::get_result(
         const struct ::timespec time_end_;
         Result result_;
         GetDns::Extensions extensions_;
-        typedef std::map< ::getdns_transaction_t, std::string > Tasks;
-        Tasks tasks_;
     } timer(solver,
             _hostnames,
             _query_timeout_sec,
@@ -1002,10 +993,12 @@ HostnameResolver::Result HostnameResolver::get_result(
 class InsecureCdnskeyResolver::Query:public GetDns::Request
 {
 public:
-    Query(const Seconds& _timeout_sec,
+    Query(const Insecure& _task,
+          const Seconds& _timeout_sec,
           const boost::optional<GetDns::TransportList>& _transport_list,
           const boost::asio::ip::address& _nameserver)
-        : timeout_sec_(_timeout_sec),
+        : task_(_task),
+          timeout_sec_(_timeout_sec),
           transport_list_(_transport_list),
           nameserver_(_nameserver),
           context_ptr_(NULL),
@@ -1048,13 +1041,9 @@ public:
         };
         throw NoResultAvailable();
     }
-    ::getdns_transaction_t get_request_id()const
+    const Insecure& get_task()const
     {
-        if (request_id_)
-        {
-            return *request_id_;
-        }
-        throw std::runtime_error("request_id not set yet");
+        return task_;
     }
 private:
     GetDns::Context& get_context()
@@ -1087,9 +1076,8 @@ private:
         context_ptr_->set_upstream_recursive_servers(nameservers);
         status_ = Status::in_progress;
     }
-    void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t _request_id)
+    void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t)
     {
-        request_id_ = _request_id;
 //        std::cerr << _answer << std::endl;
         status_ = Status::completed;
         result_.clear();
@@ -1166,28 +1154,25 @@ private:
             }
         }
     }
-    void on_cancel(::getdns_transaction_t _request_id)
+    void on_cancel(::getdns_transaction_t)
     {
-        request_id_ = _request_id;
         status_ = Status::cancelled;
     }
-    void on_timeout(::getdns_transaction_t _request_id)
+    void on_timeout(::getdns_transaction_t)
     {
-        request_id_ = _request_id;
         status_ = Status::timed_out;
     }
-    void on_error(::getdns_transaction_t _request_id)
+    void on_error(::getdns_transaction_t)
     {
-        request_id_ = _request_id;
         status_ = Status::failed;
     }
+    const Insecure task_;
     const Seconds timeout_sec_;
     const boost::optional<GetDns::TransportList> transport_list_;
     const boost::asio::ip::address nameserver_;
     GetDns::Context* context_ptr_;
     Status::Enum status_;
     Result result_;
-    boost::optional< ::getdns_transaction_t > request_id_;
 };
 
 void InsecureCdnskeyResolver::resolve(
@@ -1230,7 +1215,7 @@ void InsecureCdnskeyResolver::resolve(
                     const Query* const query_ptr = dynamic_cast<const Query*>(request_ptr);
                     if (query_ptr != NULL)
                     {
-                        const Insecure to_resolve = tasks_[query_ptr->get_request_id()];
+                        const Insecure to_resolve = query_ptr->get_task();
                         const Nameservers& nameservers = to_resolve.query.nameservers;
                         if (query_ptr->get_status() == Query::Status::completed)
                         {
@@ -1270,7 +1255,6 @@ void InsecureCdnskeyResolver::resolve(
                                           << to_resolve.query.domain << std::endl;
                             }
                         }
-                        tasks_.erase(query_ptr->get_request_id());
                     }
                 }
                 if (remaining_queries_ <= 0)
@@ -1286,11 +1270,15 @@ void InsecureCdnskeyResolver::resolve(
         {
             if (solver_.get_number_of_unresolved_requests() < max_number_of_unresolved_queries)
             {
-                const ::getdns_transaction_t task_id = solver_.add_request_for_cdnskey_resolving(
+                GetDns::RequestPtr request_ptr(
+                        new Query(*item_to_resolve_ptr_,
+                                  query_timeout_sec_,
+                                  transport_list_,
+                                  item_to_resolve_ptr_->answer.address));
+                solver_.add_request_for_cdnskey_resolving(
                         item_to_resolve_ptr_->query.domain,
-                        GetDns::RequestPtr(new Query(query_timeout_sec_, transport_list_, item_to_resolve_ptr_->answer.address)),
+                        request_ptr,
                         extensions_);
-                tasks_.insert(std::make_pair(task_id, *item_to_resolve_ptr_));
                 this->set_time_of_next_query();
                 if (item_to_resolve_ptr_ != to_resolve_.end())
                 {
@@ -1327,8 +1315,6 @@ void InsecureCdnskeyResolver::resolve(
         const boost::optional<GetDns::TransportList>& transport_list_;
         const struct ::timespec time_end_;
         GetDns::Extensions extensions_;
-        typedef std::map< ::getdns_transaction_t, Insecure > Tasks;
-        Tasks tasks_;
     } timer(solver,
             _to_resolve,
             _query_timeout_sec,
@@ -1339,11 +1325,13 @@ void InsecureCdnskeyResolver::resolve(
 class SecureCdnskeyResolver::Query:public GetDns::Request
 {
 public:
-    Query(const Seconds& _timeout_sec,
+    Query(const std::string& _domain,
+          const Seconds& _timeout_sec,
           const boost::optional<GetDns::TransportList>& _transport_list,
           const std::list<boost::asio::ip::address>& _resolvers,
           const std::list<GetDns::Data::TrustAnchor>& _trust_anchors)
-        : timeout_sec_(_timeout_sec),
+        : domain_(_domain),
+          timeout_sec_(_timeout_sec),
           transport_list_(_transport_list),
           resolvers_(_resolvers),
           trust_anchors_(_trust_anchors),
@@ -1411,13 +1399,9 @@ public:
         };
         throw NoResultAvailable();
     }
-    ::getdns_transaction_t get_request_id()const
+    const std::string& get_domain()const
     {
-        if (request_id_)
-        {
-            return *request_id_;
-        }
-        throw std::runtime_error("request_id not set yet");
+        return domain_;
     }
 private:
     GetDns::Context& get_context()
@@ -1455,9 +1439,8 @@ private:
         }
         status_ = Status::in_progress;
     }
-    void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t _request_id)
+    void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t)
     {
-        request_id_ = _request_id;
         //std::cerr << _answer << std::endl;
         status_ = Status::untrustworthy_answer;
         result_.cdnskeys.clear();
@@ -1545,21 +1528,19 @@ private:
         }
         status_ = Status::completed;
     }
-    void on_cancel(::getdns_transaction_t _request_id)
+    void on_cancel(::getdns_transaction_t)
     {
-        request_id_ = _request_id;
         status_ = Status::cancelled;
     }
-    void on_timeout(::getdns_transaction_t _request_id)
+    void on_timeout(::getdns_transaction_t)
     {
-        request_id_ = _request_id;
         status_ = Status::timed_out;
     }
-    void on_error(::getdns_transaction_t _request_id)
+    void on_error(::getdns_transaction_t)
     {
-        request_id_ = _request_id;
         status_ = Status::failed;
     }
+    const std::string domain_;
     const Seconds timeout_sec_;
     const boost::optional<GetDns::TransportList> transport_list_;
     const std::list<boost::asio::ip::address> resolvers_;
@@ -1567,7 +1548,6 @@ private:
     GetDns::Context* context_ptr_;
     Status::Enum status_;
     Result result_;
-    boost::optional< ::getdns_transaction_t > request_id_;
 };
 
 void SecureCdnskeyResolver::resolve(
@@ -1617,7 +1597,7 @@ void SecureCdnskeyResolver::resolve(
                     const Query* const query_ptr = dynamic_cast<const Query*>(request_ptr);
                     if (query_ptr != NULL)
                     {
-                        const std::string to_resolve = tasks_[query_ptr->get_request_id()];
+                        const std::string to_resolve = query_ptr->get_domain();
                         switch (query_ptr->get_status())
                         {
                             case Query::Status::completed:
@@ -1652,7 +1632,6 @@ void SecureCdnskeyResolver::resolve(
                                 break;
                             }
                         }
-                        tasks_.erase(query_ptr->get_request_id());
                     }
                 }
                 if (remaining_queries_ <= 0)
@@ -1668,15 +1647,14 @@ void SecureCdnskeyResolver::resolve(
         {
             if (solver_.get_number_of_unresolved_requests() < max_number_of_unresolved_queries)
             {
-                const ::getdns_transaction_t task_id = solver_.add_request_for_cdnskey_resolving(
-                        *item_to_resolve_ptr_,
-                        GetDns::RequestPtr(new Query(
-                                query_timeout_sec_,
-                                transport_list_,
-                                resolvers_,
-                                trust_anchors_)),
-                        extensions_);
-                tasks_.insert(std::make_pair(task_id, *item_to_resolve_ptr_));
+                const std::string domain = *item_to_resolve_ptr_;
+                const GetDns::RequestPtr query_ptr(new Query(
+                        domain,
+                        query_timeout_sec_,
+                        transport_list_,
+                        resolvers_,
+                        trust_anchors_));
+                solver_.add_request_for_cdnskey_resolving(domain, query_ptr, extensions_);
                 this->set_time_of_next_query();
                 if (item_to_resolve_ptr_ != to_resolve_.end())
                 {
@@ -1715,8 +1693,6 @@ void SecureCdnskeyResolver::resolve(
         const std::list<GetDns::Data::TrustAnchor>& trust_anchors_;
         const struct ::timespec time_end_;
         GetDns::Extensions extensions_;
-        typedef std::map< ::getdns_transaction_t, std::string > Tasks;
-        Tasks tasks_;
     } timer(solver,
             _to_resolve,
             _query_timeout_sec,
