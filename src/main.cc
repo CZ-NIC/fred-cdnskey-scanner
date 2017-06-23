@@ -106,7 +106,7 @@ struct Insecure
     struct Query
     {
         std::string domain;
-        std::string nameserver;
+        std::set<std::string> nameservers;
     } query;
     struct Answer
     {
@@ -117,7 +117,7 @@ struct Insecure
 typedef std::vector<Insecure> VectorOfInsecures;
 
 void resolve_hostnames_of_nameservers(
-        const DomainsToScanning& input,
+        const DomainsToScanning& domains_to_scanning,
         const Seconds& timeout_sec,
         const Nanoseconds& runtime_usec,
         const boost::optional<GetDns::TransportList>& transport_list,
@@ -584,18 +584,8 @@ void DomainsToScanning::data_finished()
     }
 }
 
-struct DomainNameserver
-{
-    friend bool operator<(const DomainNameserver& a, const DomainNameserver& b)
-    {
-        return a.domain < b.domain;
-    }
-    std::string domain;
-    std::string nameserver;
-};
-
 void resolve_hostnames_of_nameservers(
-        const DomainsToScanning& input,
+        const DomainsToScanning& domains_to_scanning,
         const Seconds& query_timeout,
         const Nanoseconds& runtime_nsec,
         const boost::optional<GetDns::TransportList>& transport_list,
@@ -604,9 +594,10 @@ void resolve_hostnames_of_nameservers(
 {
     typedef std::set<boost::asio::ip::address> IpAddresses;
     typedef std::map<std::string, IpAddresses> IpAddressesOfNameservers;
-    typedef std::map< boost::asio::ip::address, std::set<DomainNameserver> > IpAddressesToDomainNameserver;
+    typedef std::map<std::string, Nameservers> DomainNameservers;
+    typedef std::map<boost::asio::ip::address, DomainNameservers> IpAddressesToDomainNameservers;
 //    GetDns::Extensions extensions;
-    const Nameservers nameservers = input.get_nameservers();
+    const Nameservers nameservers = domains_to_scanning.get_nameservers();
     const HostnameResolver::Result nameserver_addresses = HostnameResolver::get_result(
             nameservers,
             query_timeout,
@@ -614,44 +605,41 @@ void resolve_hostnames_of_nameservers(
             resolvers,
             runtime_nsec);
 
-    IpAddressesToDomainNameserver domains_by_nameserver_addresses;
+    IpAddressesToDomainNameservers addresses_to_domains;
     for (IpAddressesOfNameservers::const_iterator nameserver_itr = nameserver_addresses.begin();
          nameserver_itr != nameserver_addresses.end(); ++nameserver_itr)
     {
         const std::string nameserver = nameserver_itr->first;
+        const Domains domains = domains_to_scanning.get_unsigned_domains_of(nameserver);
         for (IpAddresses::const_iterator address_itr = nameserver_itr->second.begin();
              address_itr != nameserver_itr->second.end(); ++address_itr)
         {
-            const Domains domains = input.get_unsigned_domains_of(nameserver);
-            DomainNameserver item;
-            item.nameserver = nameserver;
-            std::set<DomainNameserver>& items = domains_by_nameserver_addresses[*address_itr];
+            DomainNameservers& domain_nameservers = addresses_to_domains[*address_itr];
             for (Domains::const_iterator domain_itr = domains.begin(); domain_itr != domains.end(); ++domain_itr)
             {
-                item.domain = *domain_itr;
-                items.insert(item);
+                domain_nameservers[*domain_itr].insert(nameserver);
             }
         }
     }
 
     std::size_t number_of_items = 0;
-    for (IpAddressesToDomainNameserver::const_iterator address_itr = domains_by_nameserver_addresses.begin();
-         address_itr != domains_by_nameserver_addresses.end(); ++address_itr)
+    for (IpAddressesToDomainNameservers::const_iterator address_itr = addresses_to_domains.begin();
+         address_itr != addresses_to_domains.end(); ++address_itr)
     {
         number_of_items += address_itr->second.size();
     }
     result.clear();
     result.reserve(number_of_items);
-    for (IpAddressesToDomainNameserver::const_iterator address_itr = domains_by_nameserver_addresses.begin();
-         address_itr != domains_by_nameserver_addresses.end(); ++address_itr)
+    for (IpAddressesToDomainNameservers::const_iterator address_itr = addresses_to_domains.begin();
+         address_itr != addresses_to_domains.end(); ++address_itr)
     {
         Insecure item;
         item.answer.address = address_itr->first;
-        for (std::set<DomainNameserver>::const_iterator domain_itr = address_itr->second.begin();
+        for (DomainNameservers::const_iterator domain_itr = address_itr->second.begin();
              domain_itr != address_itr->second.end(); ++domain_itr)
         {
-            item.query.domain = domain_itr->domain;
-            item.query.nameserver = domain_itr->nameserver;
+            item.query.domain = domain_itr->first;
+            item.query.nameservers = domain_itr->second;
             result.push_back(item);
         }
     }
@@ -1243,31 +1231,44 @@ void InsecureCdnskeyResolver::resolve(
                     if (query_ptr != NULL)
                     {
                         const Insecure to_resolve = tasks_[query_ptr->get_request_id()];
+                        const Nameservers& nameservers = to_resolve.query.nameservers;
                         if (query_ptr->get_status() == Query::Status::completed)
                         {
                             const Query::Result result = query_ptr->get_result();
                             if (result.empty())
                             {
-                                std::cout << "insecure-empty " << to_resolve.query.nameserver << " "
-                                          << to_resolve.answer.address << " "
-                                          << to_resolve.query.domain << std::endl;
+                                for (Nameservers::const_iterator nameserver_itr = nameservers.begin();
+                                     nameserver_itr != nameservers.end(); ++nameserver_itr)
+                                {
+                                    std::cout << "insecure-empty " << *nameserver_itr << " "
+                                              << to_resolve.answer.address << " "
+                                              << to_resolve.query.domain << std::endl;
+                                }
                             }
                             else
                             {
                                 for (Query::Result::const_iterator key_itr = result.begin(); key_itr != result.end(); ++key_itr)
                                 {
-                                    std::cout << "insecure " << to_resolve.query.nameserver << " "
-                                              << to_resolve.answer.address << " "
-                                              << to_resolve.query.domain << " "
-                                              << *key_itr << std::endl;
+                                    for (Nameservers::const_iterator nameserver_itr = nameservers.begin();
+                                         nameserver_itr != nameservers.end(); ++nameserver_itr)
+                                    {
+                                        std::cout << "insecure " << *nameserver_itr << " "
+                                                  << to_resolve.answer.address << " "
+                                                  << to_resolve.query.domain << " "
+                                                  << *key_itr << std::endl;
+                                    }
                                 }
                             }
                         }
                         else
                         {
-                            std::cout << "unresolved " << to_resolve.query.nameserver << " "
-                                      << to_resolve.answer.address << " "
-                                      << to_resolve.query.domain << std::endl;
+                            for (Nameservers::const_iterator nameserver_itr = nameservers.begin();
+                                 nameserver_itr != nameservers.end(); ++nameserver_itr)
+                            {
+                                std::cout << "unresolved " << *nameserver_itr << " "
+                                          << to_resolve.answer.address << " "
+                                          << to_resolve.query.domain << std::endl;
+                            }
                         }
                         tasks_.erase(query_ptr->get_request_id());
                     }

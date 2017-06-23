@@ -156,7 +156,7 @@ Timeout& Timeout::set(::uint64_t _timeout_usec)
     struct ::timeval timeout;
     timeout.tv_sec = _timeout_usec / 1000000;
     timeout.tv_usec = _timeout_usec % 1000000;
-    const long min_timeout_usec = 4000;
+    const long min_timeout_usec = 1000;
     const bool timeout_too_short = (timeout.tv_sec <= 0) && (timeout.tv_usec < min_timeout_usec);
     if (timeout_too_short)
     {

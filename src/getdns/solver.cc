@@ -100,6 +100,7 @@ void Solver::getdns_callback_function(
 {
     try
     {
+        const Data::Dict answer(_response);
         Solver* const solver_instance_ptr = reinterpret_cast<Solver*>(_user_data_ptr);
         RequestId::iterator request_itr = solver_instance_ptr->active_requests_.find(_transaction_id);
         if (request_itr == solver_instance_ptr->active_requests_.end())
@@ -121,11 +122,8 @@ void Solver::getdns_callback_function(
                     request_itr->second->on_error(_transaction_id);
                     break;
                 case GETDNS_CALLBACK_COMPLETE:
-                {
-                    const Data::Dict answer(_response);
                     request_itr->second->on_complete(answer, _transaction_id);
                     break;
-                }
             }
         }
         catch (const std::exception& e)
