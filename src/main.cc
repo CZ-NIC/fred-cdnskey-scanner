@@ -23,6 +23,7 @@
 #include "src/getdns/error.hh"
 
 #include <time.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <string>
@@ -322,8 +323,12 @@ int main(int, char* argv[])
         const Seconds query_timeout = timeout_opt.empty() ? timeout_default
                                                           : Seconds(boost::lexical_cast< ::uint64_t >(timeout_opt));
         const DomainsToScanning domains_to_scanning(std::cin);
+        if ((domains_to_scanning.get_number_of_nameservers() <= 0) &&
+            (domains_to_scanning.get_number_of_secure_domains() <= 0))
+        {
+            return EXIT_SUCCESS;
+        }
         const struct ::timespec t_end = get_clock_monotonic() + runtime;
-        GetDns::Solver solver;
         GetDns::TransportList tcp_only;
         tcp_only.push_back(GetDns::Transport::tcp);
         GetDns::TransportList udp_first;
@@ -1803,9 +1808,12 @@ const char cmdline_help_text[] =
         "        nameserver2.sk blabla1.cz blabla2.cz ... blablaM.cz\n\n"
         "    Format of data sent to standard output:\n"
         "        insecure nameserver ip domain flags protocol algorithm public_key_base64\n"
+        "        insecure-empty nameserver ip domain\n"
         "        secure domain flags protocol algorithm public_key_base64\n"
+        "        secure-empty domain\n"
         "        untrustworthy domain\n"
         "        unknown domain\n"
-        "        unresolved nameserver ip domain\n";
+        "        unresolved nameserver ip domain\n"
+        "        unresolved-ip nameserver\n";
 
 }//namespace {anonymous}
