@@ -99,7 +99,7 @@ Pipe::~Pipe()
     try { close<Direction::write>(fd_); } catch (...) { }
 }
 
-ImReader::ImReader(Pipe &_pipe)
+ImReader::ImReader(Pipe& _pipe)
 :   pipe_(_pipe)
 {
     close<Direction::write>(_pipe.fd_);
@@ -135,7 +135,7 @@ int ImReader::get_descriptor()const
     return Descriptor<Direction::read>::get(pipe_.fd_);
 }
 
-std::size_t ImReader::read(void *_buf, std::size_t _buf_size)const
+std::size_t ImReader::read(void* _buf, std::size_t _buf_size)const
 {
     static const ::ssize_t failure = -1;
     const ::ssize_t bytes = ::read(this->get_descriptor(), _buf, _buf_size);
@@ -150,7 +150,7 @@ std::size_t ImReader::read(void *_buf, std::size_t _buf_size)const
     return bytes;
 }
 
-ImWriter::ImWriter(Pipe &_pipe, int _new_fd)
+ImWriter::ImWriter(Pipe& _pipe, int _new_fd)
 :   pipe_(_pipe)
 {
     close<Direction::read>(_pipe.fd_);

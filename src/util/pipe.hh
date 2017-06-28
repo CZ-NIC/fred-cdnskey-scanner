@@ -47,22 +47,22 @@ private:
 class ImReader:public boost::noncopyable
 {
 public:
-    ImReader(Pipe &_pipe);
+    ImReader(Pipe& _pipe);
     ~ImReader() { }
     void set_nonblocking()const;
     int get_descriptor()const;
-    std::size_t read(void *_buf, std::size_t _buf_size)const;
+    std::size_t read(void* _buf, std::size_t _buf_size)const;
 private:
-    Pipe &pipe_;
+    Pipe& pipe_;
 };
 
 class ImWriter:public boost::noncopyable
 {
 public:
-    ImWriter(Pipe &_pipe, int _new_fd);
+    ImWriter(Pipe& _pipe, int _new_fd);
     ~ImWriter() { }
 private:
-    Pipe &pipe_;
+    Pipe& pipe_;
 };
 
 }//namespace Util
