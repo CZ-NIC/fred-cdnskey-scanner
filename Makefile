@@ -57,7 +57,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 test: $(BINARY)
-	@$(BINARY) 35 \
+	@$(BINARY) 5 \
 --hostname_resolvers "172.20.20.253" \
 --cdnskey_resolvers "172.16.1.183" \
 --dnssec_trust_anchors ". 257 3 8 \

@@ -19,6 +19,7 @@
 #include "src/util/pipe.hh"
 
 #include <fcntl.h>
+#include <unistd.h>
 
 #include <stdexcept>
 #include <sstream>
@@ -133,21 +134,6 @@ void ImReader::set_nonblocking()const
 int ImReader::get_descriptor()const
 {
     return Descriptor<Direction::read>::get(pipe_.fd_);
-}
-
-std::size_t ImReader::read(void* _buf, std::size_t _buf_size)const
-{
-    static const ::ssize_t failure = -1;
-    const ::ssize_t bytes = ::read(this->get_descriptor(), _buf, _buf_size);
-    if (bytes == failure)
-    {
-        struct ReadFailed:std::runtime_error
-        {
-            ReadFailed(int error_code):std::runtime_error(std::string("read() failed: ") + std::strerror(error_code)) { }
-        };
-        throw ReadFailed(errno);
-    }
-    return bytes;
 }
 
 ImWriter::ImWriter(Pipe& _pipe, int _new_fd)

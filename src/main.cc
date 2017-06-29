@@ -26,6 +26,9 @@
 
 #include <time.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <signal.h>
+#include <sys/wait.h>
 
 #include <algorithm>
 #include <string>
@@ -1016,21 +1019,130 @@ class HostnameResolverAnswer
 public:
     HostnameResolverAnswer(
             Event::Base& _base,
-            HostnameResolver::Result& _result,
+            HostnameResolver::Result& _resolved,
+            std::set<std::string>& _unresolved,
             const Util::ImReader& _source,
-            ::pid_t _child_pid,
             const Seconds& _max_idle_sec)
         : source_(_source),
-          result_(_result),
-          event_ptr_(::event_new(_base.get_base(), source_.get_descriptor(), monitored_events_, callback_routine, this)),
-          child_pid_(_child_pid),
-          max_idle_sec_(_max_idle_sec)
+          resolved_(_resolved),
+          unresolved_(_unresolved),
+          event_ptr_(::event_new(_base.get_base(),
+                                 source_.get_descriptor(),
+                                 monitored_events_ | EV_PERSIST,
+                                 callback_routine,
+                                 this)),
+          max_idle_sec_(_max_idle_sec),
+          source_stream_closed_(false),
+          timed_out_(false)
     {
+        this->monitor_events_on_source_stream();
+        while (true)
+        {
+            _base.loop();
+            if (timed_out_)
+            {
+                return;
+            }
+            if (content_.empty())
+            {
+                if (source_stream_closed_)
+                {
+                    return;
+                }
+                continue;
+            }
+            const char* line_begin = content_.c_str();
+            while (*line_begin != '\0')
+            {
+                const char* line_end = line_begin;
+                while ((*line_end != '\0') && (*line_end != '\n'))
+                {
+                    ++line_end;
+                }
+                const bool line_end_reached = (*line_end == '\n') || source_stream_closed_;
+                if (!line_end_reached)
+                {
+                    break;
+                }
+                this->line_received(line_begin, line_end);
+                const bool data_end_reached = (*line_end == '\0') && source_stream_closed_;
+                if (data_end_reached)
+                {
+                    return;
+                }
+                line_begin = line_end + 1;
+            }
+            content_ = line_begin;
+        }
     }
-    ~HostnameResolverAnswer();
-    HostnameResolverAnswer& set(::uint64_t _timeout_usec);
-    HostnameResolverAnswer& remove();
+    ~HostnameResolverAnswer()
+    {
+        this->remove();
+    }
+    bool timed_out()const
+    {
+        return timed_out_;
+    }
 private:
+    void line_received(const char* _line_begin, const char* _line_end)
+    {
+        const int string_equal = 0;
+        const char* const prefix = _line_begin;
+        if (std::strncmp(prefix, "resolved ", std::strlen("resolved ")) == string_equal)
+        {
+            const char* const hostname_begin = prefix + std::strlen("resolved ");
+            const char* hostname_end = hostname_begin;
+            while ((hostname_end < _line_end) && (*hostname_end != ' '))
+            {
+                ++hostname_end;
+            }
+            const std::string hostname(hostname_begin, hostname_end - hostname_begin);
+            const char* const address_begin = hostname_end + 1;
+            if (_line_end <= address_begin)
+            {
+                throw std::runtime_error("invalid data received");
+            }
+            const std::string address(address_begin, _line_end - address_begin);
+            resolved_[hostname].insert(boost::asio::ip::address::from_string(address));
+            return;
+        }
+        if (std::strncmp(prefix, "unresolved-ip ", std::strlen("unresolved-ip ")) == string_equal)
+        {
+            const char* const hostname_begin = prefix + std::strlen("unresolved-ip ");
+            const std::string hostname(hostname_begin, _line_end - hostname_begin);
+            unresolved_.insert(hostname);
+            std::cout << std::string(_line_begin, _line_end - _line_begin) << std::endl;
+            return;
+        }
+        throw std::runtime_error("invalid data received");
+    }
+    HostnameResolverAnswer& monitor_events_on_source_stream()
+    {
+        struct ::timeval timeout;
+        timeout.tv_sec = max_idle_sec_.value;
+        timeout.tv_usec = 0;
+        const int success = 0;
+        const int retval = ::event_add(event_ptr_, &timeout);
+        if (retval == success)
+        {
+            return *this;
+        }
+        struct EventAddFailure:std::runtime_error
+        {
+            EventAddFailure():std::runtime_error("event_add failed") { }
+        };
+        throw EventAddFailure();
+    }
+    HostnameResolverAnswer& remove()
+    {
+        if (event_ptr_ != NULL)
+        {
+            ::event_del(event_ptr_);
+            ::event_free(event_ptr_);
+            event_ptr_ = NULL;
+        }
+        return *this;
+    }
     void on_event(short _events)
     {
         const bool timed_out = (_events & EV_TIMEOUT) == EV_TIMEOUT;
@@ -1046,9 +1158,52 @@ private:
     }
     void on_timeout()
     {
+        timed_out_ = true;
     }
     void on_read()
     {
+        char buffer[0x10000];
+        while (true)
+        {
+            static const ::ssize_t failure = -1;
+            const ::ssize_t read_retval = ::read(source_.get_descriptor(), buffer, sizeof(buffer));
+            const bool read_failed = (read_retval == failure);
+            if (!read_failed)
+            {
+                const bool end_reached = (read_retval == 0);
+                if (end_reached)
+                {
+                    source_stream_closed_ = true;
+                }
+                else
+                {
+                    const std::size_t data_length = static_cast<std::size_t>(read_retval);
+                    content_.append(buffer, data_length);
+                    const bool all_available_data_already_read = data_length < sizeof(buffer);
+                    if (!all_available_data_already_read)
+                    {
+                        continue;
+                    }
+                }
+                return;
+            }
+            const int c_errno = errno;
+            const bool data_unavailable = (c_errno == EAGAIN) || (c_errno == EWOULDBLOCK);
+            if (data_unavailable)
+            {
+                return;
+            }
+            const bool operation_was_interrupted_by_a_signal = c_errno == EINTR;
+            if (operation_was_interrupted_by_a_signal)
+            {
+                return;
+            }
+            struct ReadFailed:std::runtime_error
+            {
+                ReadFailed(int error_code):std::runtime_error(std::string("read() failed: ") + std::strerror(error_code)) { }
+            };
+            throw ReadFailed(c_errno);
+        }
     }
     static void callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr)
     {
@@ -1070,11 +1225,14 @@ private:
         }
     }
     const Util::ImReader& source_;
-    HostnameResolver::Result& result_;
+    HostnameResolver::Result& resolved_;
+    std::set<std::string>& unresolved_;
     struct ::event* event_ptr_;
-    const ::pid_t child_pid_;
     const Seconds max_idle_sec_;
-    static const short monitored_events_ = EV_READ | EV_TIMEOUT;
+    std::string content_;
+    bool source_stream_closed_;
+    bool timed_out_;
+    static const short monitored_events_ = EV_READ;
 };
 
 HostnameResolver::Result HostnameResolver::get_result(
@@ -1084,12 +1242,13 @@ HostnameResolver::Result HostnameResolver::get_result(
         const std::list<boost::asio::ip::address>& _resolvers,
         const Nanoseconds& _assigned_time_nsec)
 {
-    Result result;
+    Result resolved;
+    std::set<std::string> unresolved;
     if (_hostnames.empty())
     {
-        return result;
+        return resolved;
     }
-    while (result.size() < _hostnames.size())
+    while ((resolved.size() + unresolved.size()) < _hostnames.size())
     {
         Util::Pipe pipe_from_child;
         const ::pid_t child_pid = ::fork();
@@ -1107,7 +1266,7 @@ HostnameResolver::Result HostnameResolver::get_result(
         {
             Util::ImWriter to_parent(pipe_from_child, STDOUT_FILENO);
             GetDns::Solver solver;
-            if (result.empty())
+            if (resolved.empty() && unresolved.empty())
             {
                 const QueryGenerator resolve(
                         solver,
@@ -1119,10 +1278,25 @@ HostnameResolver::Result HostnameResolver::get_result(
             }
             else
             {
-                std::set<std::string> hostnames = _hostnames;
-                for (Result::const_iterator result_itr = result.begin(); result_itr != result.end(); ++result_itr)
+                std::set<std::string> hostnames;
+                Result::const_iterator resolved_itr = resolved.begin();
+                std::set<std::string>::const_iterator unresolved_itr = unresolved.begin();
+                for (std::set<std::string>::const_iterator hostname_itr = _hostnames.begin();
+                     hostname_itr != _hostnames.end(); ++hostname_itr)
                 {
-                    hostnames.erase(result_itr->first);
+                    const std::string hostname = *hostname_itr;
+                    if ((resolved_itr != resolved.end()) && (hostname == resolved_itr->first))
+                    {
+                        ++resolved_itr;
+                    }
+                    else if ((unresolved_itr != unresolved.end()) && (hostname == *unresolved_itr))
+                    {
+                        ++unresolved_itr;
+                    }
+                    else
+                    {
+                        hostnames.insert(hostname);
+                    }
                 }
                 const QueryGenerator resolve(
                         solver,
@@ -1140,11 +1314,48 @@ HostnameResolver::Result HostnameResolver::get_result(
             from_child.set_nonblocking();
             Event::Base monitor;
             const double query_distance_sec = (_assigned_time_nsec.value / double(_hostnames.size())) / 1000000000LL;
-            const Seconds answer_timeout_sec = query_distance_sec + _query_timeout_sec.value + 5;
-            HostnameResolverAnswer answer(monitor, result, from_child, child_pid, answer_timeout_sec);
+            const Seconds answer_timeout_sec(query_distance_sec + _query_timeout_sec.value + 5);
+            const HostnameResolverAnswer answer(monitor, resolved, unresolved, from_child, answer_timeout_sec);
+            int status;
+            const ::pid_t wait_result = ::waitpid(child_pid, &status, WNOHANG);
+            const bool child_is_still_running = wait_result == 0;
+            if (child_is_still_running)
+            {
+                ::kill(child_pid, SIGKILL);
+                const ::pid_t wait_result = ::waitpid(child_pid, &status, 0);
+                if (wait_result != child_pid)
+                {
+                    throw std::runtime_error("unable to kill child process");
+                }
+                std::cerr << "child process was terminated because of blocking" << std::endl;
+            }
+            else
+            {
+                if (WIFEXITED(status))
+                {
+                    if (WEXITSTATUS(status) == EXIT_SUCCESS)
+                    {
+                        std::cerr << "child process successfully done" << std::endl;
+                        if ((resolved.size() + unresolved.size()) < _hostnames.size())
+                        {
+                            throw std::runtime_error("hostname resolver doesn't completed its job");
+                        }
+                        return resolved;
+                    }
+                    std::cerr << "child process failed" << std::endl;
+                }
+                else if (WIFSIGNALED(status))
+                {
+                    std::cerr << "child process terminated by signal" << std::endl;
+                }
+                else
+                {
+                    std::cerr << "child process done" << std::endl;
+                }
+            }
         }
     }
-    return result;
+    return resolved;
 }
 
 class InsecureCdnskeyResolver::Query:public GetDns::Request

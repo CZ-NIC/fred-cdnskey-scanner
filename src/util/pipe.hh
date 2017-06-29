@@ -51,7 +51,6 @@ public:
     ~ImReader() { }
     void set_nonblocking()const;
     int get_descriptor()const;
-    std::size_t read(void* _buf, std::size_t _buf_size)const;
 private:
     Pipe& pipe_;
 };
