@@ -412,7 +412,7 @@ DomainsToScanning::DomainsToScanning(std::istream& _data_source)
 {
     while (!_data_source.eof())
     {
-        const bool stdin_is_broken = !std::cin;
+        const bool stdin_is_broken = !_data_source;
         if (stdin_is_broken)
         {
             throw std::runtime_error("stream is broken");
@@ -502,20 +502,38 @@ DomainsToScanning& DomainsToScanning::append_data(const char* _data_chunk, std::
         switch (section_)
         {
             case secure:
-                signed_domains_.insert(item);
+                if (!item.empty())
+                {
+                    signed_domains_.insert(item);
+                }
+                else
+                {
+                    std::cerr << "secure section contains an empty fqdn of domain" << std::endl;
+                }
                 break;
             case insecure:
             {
                 const bool item_is_nameserver = data_starts_at_new_line_;
                 if (item_is_nameserver)
                 {
+                    if (item.empty())
+                    {
+                        throw std::runtime_error("insecure section contains an empty hostname of nameserver");
+                    }
                     nameserver_ = item;
                     data_starts_at_new_line_ = false;
                     unsigned_domains_.clear();
                 }
                 else
                 {
-                    unsigned_domains_.insert(item);
+                    if (!item.empty())
+                    {
+                        unsigned_domains_.insert(item);
+                    }
+                    else
+                    {
+                        std::cerr << "insecure section contains an empty fqdn of domain" << std::endl;
+                    }
                 }
                 break;
             }
@@ -561,14 +579,20 @@ void DomainsToScanning::data_finished()
     switch (section_)
     {
         case secure:
-            signed_domains_.insert(item);
+            if (!item.empty())
+            {
+                signed_domains_.insert(item);
+            }
             return;
         case insecure:
         {
             const bool item_is_nameserver = data_starts_at_new_line_;
             if (!item_is_nameserver)
             {
-                unsigned_domains_.insert(item);
+                if (!item.empty())
+                {
+                    unsigned_domains_.insert(item);
+                }
                 const bool nameserver_data_available = !nameserver_.empty() && !unsigned_domains_.empty();
                 if (nameserver_data_available)
                 {
