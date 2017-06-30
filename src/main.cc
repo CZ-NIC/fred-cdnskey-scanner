@@ -372,6 +372,9 @@ DomainsToScan::DomainsToScan(std::istream& _data_source)
     : section_(none),
       data_starts_at_new_line_(true)
 {
+#ifndef DISABLE_COPYING_DATA_TO_STDERR
+        std::cerr << "====== input data start at new line ===\n";
+#endif
     while (!_data_source.eof())
     {
         const bool stdin_is_broken = !_data_source;
@@ -382,8 +385,22 @@ DomainsToScan::DomainsToScan(std::istream& _data_source)
         char data_chunk[0x10000];
         _data_source.read(data_chunk, sizeof(data_chunk));
         const std::streamsize data_chunk_length = _data_source.gcount();
+#ifndef DISABLE_COPYING_DATA_TO_STDERR
+        std::string to_display = "\33[37;42m" + std::string(data_chunk, data_chunk_length) + "\33[0m";
+        const std::string replacement = "\33[0m\n\33[37;42m";
+        std::size_t pos = 0;
+        while ((pos = to_display.find("\n", pos)) != std::string::npos)
+        {
+            to_display.replace(pos, 1, replacement);
+            pos += replacement.length();
+        }
+        std::cerr << to_display;
+#endif
         this->append_data(data_chunk, data_chunk_length);
     }
+#ifndef DISABLE_COPYING_DATA_TO_STDERR
+        std::cerr << "|<--- here finish input data\n\n";
+#endif
     this->data_finished();
 }
 
