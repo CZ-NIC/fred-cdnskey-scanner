@@ -136,11 +136,27 @@ int ImReader::get_descriptor()const
     return Descriptor<Direction::read>::get(pipe_.fd_);
 }
 
-ImWriter::ImWriter(Pipe& _pipe, int _new_fd)
+namespace {
+
+int get_descriptor_number_of(ImWriter::Stream stream)
+{
+    switch (stream)
+    {
+        case ImWriter::stdout:
+            return STDOUT_FILENO;
+        case ImWriter::stderr:
+            return STDERR_FILENO;
+    }
+    throw std::logic_error("unexpected enum value");
+}
+
+}//namespace Util::{anonymous}
+
+ImWriter::ImWriter(Pipe& _pipe, Stream _into)
 :   pipe_(_pipe)
 {
     close<Direction::read>(_pipe.fd_);
-    dup<Direction::write>(_pipe.fd_, _new_fd);
+    dup<Direction::write>(_pipe.fd_, get_descriptor_number_of(_into));
 }
 
 namespace {

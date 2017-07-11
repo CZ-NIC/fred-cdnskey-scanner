@@ -23,6 +23,7 @@
 #include "src/getdns/error.hh"
 
 #include "src/util/pipe.hh"
+#include "src/util/fork.hh"
 
 #include <time.h>
 #include <unistd.h>
@@ -159,6 +160,7 @@ public:
 private:
     class Query;
     class QueryGenerator;
+    class ChildProcess;
 };
 
 class InsecureCdnskeyResolver
@@ -1235,6 +1237,84 @@ private:
     static const short monitored_events_ = EV_READ;
 };
 
+class HostnameResolver::ChildProcess
+{
+public:
+    ChildProcess(
+            const std::set<std::string>& _hostnames,
+            const Seconds& _query_timeout_sec,
+            const boost::optional<GetDns::TransportList>& _transport_list,
+            const std::list<boost::asio::ip::address>& _resolvers,
+            const Nanoseconds& _assigned_time_nsec,
+            const Result& _resolved,
+            const std::set<std::string>& _unresolved,
+            Util::Pipe& _pipe_to_parent)
+        : hostnames_(_hostnames),
+          query_timeout_sec_(_query_timeout_sec),
+          transport_list_(_transport_list),
+          resolvers_(_resolvers),
+          assigned_time_nsec_(_assigned_time_nsec),
+          resolved_(_resolved),
+          unresolved_(_unresolved),
+          pipe_to_parent_(_pipe_to_parent)
+    { }
+    int operator()()const
+    {
+        Util::ImWriter to_parent(pipe_to_parent_, Util::ImWriter::stdout);
+        GetDns::Solver solver;
+        if (resolved_.empty() && unresolved_.empty())
+        {
+            const QueryGenerator resolve(
+                    solver,
+                    hostnames_,
+                    query_timeout_sec_,
+                    transport_list_,
+                    resolvers_,
+                    assigned_time_nsec_);
+        }
+        else
+        {
+            std::set<std::string> hostnames;
+            Result::const_iterator resolved_itr = resolved_.begin();
+            std::set<std::string>::const_iterator unresolved_itr = unresolved_.begin();
+            for (std::set<std::string>::const_iterator hostname_itr = hostnames_.begin();
+                 hostname_itr != hostnames_.end(); ++hostname_itr)
+            {
+                const std::string hostname = *hostname_itr;
+                if ((resolved_itr != resolved_.end()) && (hostname == resolved_itr->first))
+                {
+                    ++resolved_itr;
+                }
+                else if ((unresolved_itr != unresolved_.end()) && (hostname == *unresolved_itr))
+                {
+                    ++unresolved_itr;
+                }
+                else
+                {
+                    hostnames.insert(hostname);
+                }
+            }
+            const QueryGenerator resolve(
+                    solver,
+                    hostnames,
+                    query_timeout_sec_,
+                    transport_list_,
+                    resolvers_,
+                    Nanoseconds(assigned_time_nsec_.value * double(hostnames.size()) / hostnames_.size()));
+        }
+        return EXIT_SUCCESS;
+    }
+private:
+    const std::set<std::string>& hostnames_;
+    const Seconds& query_timeout_sec_;
+    const boost::optional<GetDns::TransportList>& transport_list_;
+    const std::list<boost::asio::ip::address>& resolvers_;
+    const Nanoseconds& assigned_time_nsec_;
+    const Result& resolved_;
+    const std::set<std::string>& unresolved_;
+    Util::Pipe& pipe_to_parent_;
+};
+
 HostnameResolver::Result HostnameResolver::get_result(
         const std::set<std::string>& _hostnames,
         const Seconds& _query_timeout_sec,
@@ -1250,108 +1330,54 @@ HostnameResolver::Result HostnameResolver::get_result(
     }
     while ((resolved.size() + unresolved.size()) < _hostnames.size())
     {
-        Util::Pipe pipe_from_child;
-        const ::pid_t child_pid = ::fork();
-        const bool fork_failed = child_pid == -1;
-        if (fork_failed)
-        {
-            struct ForkFailed:std::runtime_error
-            {
-                ForkFailed(int error_code):std::runtime_error(std::string("fork() failed: ") + std::strerror(error_code)) { }
-            };
-            throw ForkFailed(errno);
-        }
-        const bool i_am_child_process = child_pid == 0;
-        if (i_am_child_process)
-        {
-            Util::ImWriter to_parent(pipe_from_child, STDOUT_FILENO);
-            GetDns::Solver solver;
-            if (resolved.empty() && unresolved.empty())
-            {
-                const QueryGenerator resolve(
-                        solver,
+        Util::Pipe pipe;
+        Util::Fork parent(
+                ChildProcess(
                         _hostnames,
                         _query_timeout_sec,
                         _transport_list,
                         _resolvers,
-                        _assigned_time_nsec);
-            }
-            else
-            {
-                std::set<std::string> hostnames;
-                Result::const_iterator resolved_itr = resolved.begin();
-                std::set<std::string>::const_iterator unresolved_itr = unresolved.begin();
-                for (std::set<std::string>::const_iterator hostname_itr = _hostnames.begin();
-                     hostname_itr != _hostnames.end(); ++hostname_itr)
-                {
-                    const std::string hostname = *hostname_itr;
-                    if ((resolved_itr != resolved.end()) && (hostname == resolved_itr->first))
-                    {
-                        ++resolved_itr;
-                    }
-                    else if ((unresolved_itr != unresolved.end()) && (hostname == *unresolved_itr))
-                    {
-                        ++unresolved_itr;
-                    }
-                    else
-                    {
-                        hostnames.insert(hostname);
-                    }
-                }
-                const QueryGenerator resolve(
-                        solver,
-                        hostnames,
-                        _query_timeout_sec,
-                        _transport_list,
-                        _resolvers,
-                        Nanoseconds(_assigned_time_nsec.value * double(hostnames.size()) / _hostnames.size()));
-            }
-            ::_exit(EXIT_SUCCESS);
-        }
-        else
+                        _assigned_time_nsec,
+                        resolved,
+                        unresolved,
+                        pipe));
+        Util::ImReader from_child(pipe);
+        from_child.set_nonblocking();
+        Event::Base monitor;
+        const double query_distance_sec = (_assigned_time_nsec.value / double(_hostnames.size())) / 1000000000LL;
+        const Seconds answer_timeout_sec(query_distance_sec + _query_timeout_sec.value + 5);
+        const HostnameResolverAnswer answer(monitor, resolved, unresolved, from_child, answer_timeout_sec);
+        try
         {
-            Util::ImReader from_child(pipe_from_child);
-            from_child.set_nonblocking();
-            Event::Base monitor;
-            const double query_distance_sec = (_assigned_time_nsec.value / double(_hostnames.size())) / 1000000000LL;
-            const Seconds answer_timeout_sec(query_distance_sec + _query_timeout_sec.value + 5);
-            const HostnameResolverAnswer answer(monitor, resolved, unresolved, from_child, answer_timeout_sec);
-            int status;
-            const ::pid_t wait_result = ::waitpid(child_pid, &status, WNOHANG);
-            const bool child_is_still_running = wait_result == 0;
-            if (child_is_still_running)
+            const Util::Fork::ChildResultStatus child_result_status = parent.get_child_result_status();
+            if (child_result_status.exited())
             {
-                ::kill(child_pid, SIGKILL);
-                const ::pid_t wait_result = ::waitpid(child_pid, &status, 0);
-                if (wait_result != child_pid)
+                if (child_result_status.get_exit_status() == EXIT_SUCCESS)
                 {
-                    throw std::runtime_error("unable to kill child process");
+                    std::cerr << "child process successfully done" << std::endl;
+                    if ((resolved.size() + unresolved.size()) < _hostnames.size())
+                    {
+                        throw std::runtime_error("hostname resolver doesn't completed its job");
+                    }
+                    return resolved;
                 }
-                std::cerr << "child process was terminated because of blocking" << std::endl;
+                std::cerr << "child process failed" << std::endl;
+            }
+            else if (child_result_status.signaled())
+            {
+                std::cerr << "child process terminated by signal " << child_result_status.get_signal_number() << std::endl;
             }
             else
             {
-                if (WIFEXITED(status))
-                {
-                    if (WEXITSTATUS(status) == EXIT_SUCCESS)
-                    {
-                        std::cerr << "child process successfully done" << std::endl;
-                        if ((resolved.size() + unresolved.size()) < _hostnames.size())
-                        {
-                            throw std::runtime_error("hostname resolver doesn't completed its job");
-                        }
-                        return resolved;
-                    }
-                    std::cerr << "child process failed" << std::endl;
-                }
-                else if (WIFSIGNALED(status))
-                {
-                    std::cerr << "child process terminated by signal" << std::endl;
-                }
-                else
-                {
-                    std::cerr << "child process done" << std::endl;
-                }
+                std::cerr << "child process done" << std::endl;
+            }
+        }
+        catch (const Util::Fork::ChildIsStillRunning&)
+        {
+            const Util::Fork::ChildResultStatus child_result_status = parent.kill_child();
+            if (child_result_status.signaled())
+            {
+                std::cerr << "child process was terminated because of blocking" << std::endl;
             }
         }
     }

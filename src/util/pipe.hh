@@ -25,10 +25,10 @@
 
 namespace Util {
 
-//public read end of pipe interface, hide write end of pipe
+//public read end of pipe interface, hides write end of pipe
 class ImReader;
 
-//public write end of pipe interface, hide read end of pipe
+//public write end of pipe interface, hides read end of pipe
 class ImWriter;
 
 class Pipe
@@ -58,7 +58,12 @@ private:
 class ImWriter:public boost::noncopyable
 {
 public:
-    ImWriter(Pipe& _pipe, int _new_fd);
+    enum Stream
+    {
+        stdout,
+        stderr
+    };
+    ImWriter(Pipe& _pipe, Stream _into);
     ~ImWriter() { }
 private:
     Pipe& pipe_;
