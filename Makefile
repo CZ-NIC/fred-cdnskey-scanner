@@ -27,9 +27,9 @@ GETDNS_DIR := $(BUILD_DIR)/getdns
 UTIL_DIR := $(BUILD_DIR)/util
 BINARY = $(BUILD_DIR)/cdnskey-scanner
 OBJS := $(BUILD_DIR)/main.o $(BUILD_DIR)/hostname_resolver.o $(BUILD_DIR)/insecure_cdnskey_resolver.o \
-$(BUILD_DIR)/time_unit.o $(EVENT_DIR)/base.o $(GETDNS_DIR)/error.o $(GETDNS_DIR)/data.o \
-$(GETDNS_DIR)/context.o $(GETDNS_DIR)/extensions.o $(GETDNS_DIR)/rrtype.o $(GETDNS_DIR)/solver.o \
-$(UTIL_DIR)/pipe.o $(UTIL_DIR)/fork.o
+$(BUILD_DIR)/secure_cdnskey_resolver.o $(BUILD_DIR)/time_unit.o $(EVENT_DIR)/base.o \
+$(GETDNS_DIR)/error.o $(GETDNS_DIR)/data.o $(GETDNS_DIR)/context.o $(GETDNS_DIR)/extensions.o \
+$(GETDNS_DIR)/rrtype.o $(GETDNS_DIR)/solver.o $(UTIL_DIR)/pipe.o $(UTIL_DIR)/fork.o
 DBG_OPT = -ggdb3
 WARN_OPT = -W -Wall
 CFLAGS := -I. $(DBG_OPT) $(WARN_OPT) -O0
