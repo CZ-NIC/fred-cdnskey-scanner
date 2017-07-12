@@ -29,6 +29,8 @@
 
 namespace {
 
+const int max_number_of_unresolved_queries = 200;
+
 class Query:public GetDns::Request
 {
 public:
@@ -237,7 +239,6 @@ public:
 private:
     Event::OnTimeout& on_timeout_occurrence()
     {
-        const int max_number_of_unresolved_queries = 200;
         if (solver_.get_number_of_unresolved_requests() < max_number_of_unresolved_queries)
         {
             GetDns::RequestPtr request_ptr(

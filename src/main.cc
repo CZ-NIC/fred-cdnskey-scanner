@@ -545,16 +545,19 @@ void resolve_hostnames_of_nameservers(
          nameserver_itr != nameserver_addresses.end(); ++nameserver_itr)
     {
         const std::string nameserver = nameserver_itr->first;
+//        std::cerr << nameserver;
         const Domains domains = domains_to_scanning.get_unsigned_domains_of(nameserver);
         for (IpAddresses::const_iterator address_itr = nameserver_itr->second.begin();
              address_itr != nameserver_itr->second.end(); ++address_itr)
         {
+//            std::cerr << " " << *address_itr;
             DomainNameservers& domain_nameservers = addresses_to_domains[*address_itr];
             for (Domains::const_iterator domain_itr = domains.begin(); domain_itr != domains.end(); ++domain_itr)
             {
                 domain_nameservers[*domain_itr].insert(nameserver);
             }
         }
+//        std::cerr << std::endl;
     }
 
     std::size_t number_of_items = 0;
