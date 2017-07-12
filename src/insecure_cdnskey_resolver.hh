@@ -32,30 +32,20 @@
 
 struct Insecure
 {
-    struct Query
-    {
-        std::string domain;
-        std::set<std::string> nameservers;
-    } query;
-    struct Answer
-    {
-        boost::asio::ip::address address;
-    } answer;
+    std::string domain;
+    std::set<std::string> nameservers;
+    boost::asio::ip::address address;
 };
 
 typedef std::vector<Insecure> VectorOfInsecures;
 
-class InsecureCdnskeyResolver
+struct InsecureCdnskeyResolver
 {
-public:
     static void resolve(
             const VectorOfInsecures& _to_resolve,
             const TimeUnit::Seconds& _query_timeout_sec,
             const boost::optional<GetDns::TransportList>& _transport_list,
             const TimeUnit::Nanoseconds& _assigned_time_nsec);
-private:
-    class Query;
 };
-
 
 #endif//INSECURE_CDNSKEY_RESOLVER_HH_E7501EBD49F1AFA724581AA72FFD4314

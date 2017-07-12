@@ -27,7 +27,9 @@
 #include <iostream>
 #include <list>
 
-class HostnameResolver::Query:public GetDns::Request
+namespace {
+
+class Query:public GetDns::Request
 {
 public:
     Query(const std::string& _hostname,
@@ -162,7 +164,7 @@ private:
     Result result_;
 };
 
-class HostnameResolver::QueryGenerator:public Event::Timeout
+class QueryGenerator:public Event::Timeout
 {
 public:
     QueryGenerator(
@@ -239,7 +241,7 @@ private:
         if (solver_.get_number_of_unresolved_requests() < max_number_of_unresolved_queries)
         {
             GetDns::RequestPtr request_ptr(
-                    new HostnameResolver::Query(
+                    new Query(
                             *hostname_ptr_,
                             query_timeout_sec_,
                             transport_list_,
@@ -290,17 +292,14 @@ private:
     GetDns::Extensions extensions_;
 };
 
-namespace {
-
-class HostnameResolverAnswer
+class Answer
 {
 public:
-    HostnameResolverAnswer(
-            Event::Base& _base,
-            HostnameResolver::Result& _resolved,
-            std::set<std::string>& _unresolved,
-            const Util::ImReader& _source,
-            const TimeUnit::Seconds& _max_idle_sec)
+    Answer(Event::Base& _base,
+           HostnameResolver::Result& _resolved,
+           std::set<std::string>& _unresolved,
+           const Util::ImReader& _source,
+           const TimeUnit::Seconds& _max_idle_sec)
         : source_(_source),
           resolved_(_resolved),
           unresolved_(_unresolved),
@@ -353,7 +352,7 @@ public:
             content_ = line_begin;
         }
     }
-    ~HostnameResolverAnswer()
+    ~Answer()
     {
         this->remove();
     }
@@ -394,7 +393,7 @@ private:
         }
         throw std::runtime_error("invalid data received");
     }
-    HostnameResolverAnswer& monitor_events_on_source_stream()
+    Answer& monitor_events_on_source_stream()
     {
         struct ::timeval timeout;
         timeout.tv_sec = max_idle_sec_.value;
@@ -411,7 +410,7 @@ private:
         };
         throw EventAddFailure();
     }
-    HostnameResolverAnswer& remove()
+    Answer& remove()
     {
         if (event_ptr_ != NULL)
         {
@@ -485,7 +484,7 @@ private:
     }
     static void callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr)
     {
-        HostnameResolverAnswer* const event_ptr = static_cast<HostnameResolverAnswer*>(_user_data_ptr);
+        Answer* const event_ptr = static_cast<Answer*>(_user_data_ptr);
         if ((event_ptr != NULL) && (event_ptr->source_.get_descriptor() == _fd))
         {
             try
@@ -494,11 +493,11 @@ private:
             }
             catch (const std::exception& e)
             {
-                std::cerr << "HostnameResolverAnswer::on_event failed: " << e.what() << std::endl;
+                std::cerr << "Answer::on_event failed: " << e.what() << std::endl;
             }
             catch (...)
             {
-                std::cerr << "HostnameResolverAnswer::on_event caught an unexpected exception" << std::endl;
+                std::cerr << "Answer::on_event caught an unexpected exception" << std::endl;
             }
         }
     }
@@ -513,9 +512,7 @@ private:
     static const short monitored_events_ = EV_READ;
 };
 
-}//namespace {anonymous}
-
-class HostnameResolver::ChildProcess
+class ChildProcess
 {
 public:
     ChildProcess(
@@ -524,7 +521,7 @@ public:
             const boost::optional<GetDns::TransportList>& _transport_list,
             const std::list<boost::asio::ip::address>& _resolvers,
             const TimeUnit::Nanoseconds& _assigned_time_nsec,
-            const Result& _resolved,
+            const HostnameResolver::Result& _resolved,
             const std::set<std::string>& _unresolved,
             Util::Pipe& _pipe_to_parent)
         : hostnames_(_hostnames),
@@ -553,7 +550,7 @@ public:
         else
         {
             std::set<std::string> hostnames;
-            Result::const_iterator resolved_itr = resolved_.begin();
+            HostnameResolver::Result::const_iterator resolved_itr = resolved_.begin();
             std::set<std::string>::const_iterator unresolved_itr = unresolved_.begin();
             for (std::set<std::string>::const_iterator hostname_itr = hostnames_.begin();
                  hostname_itr != hostnames_.end(); ++hostname_itr)
@@ -588,10 +585,12 @@ private:
     const boost::optional<GetDns::TransportList>& transport_list_;
     const std::list<boost::asio::ip::address>& resolvers_;
     const TimeUnit::Nanoseconds& assigned_time_nsec_;
-    const Result& resolved_;
+    const HostnameResolver::Result& resolved_;
     const std::set<std::string>& unresolved_;
     Util::Pipe& pipe_to_parent_;
 };
+
+}//namespace {anonymous}
 
 HostnameResolver::Result HostnameResolver::get_result(
         const std::set<std::string>& _hostnames,
@@ -624,7 +623,7 @@ HostnameResolver::Result HostnameResolver::get_result(
         Event::Base monitor;
         const double query_distance_sec = (_assigned_time_nsec.value / double(_hostnames.size())) / 1000000000LL;
         const TimeUnit::Seconds answer_timeout_sec(query_distance_sec + _query_timeout_sec.value + 5);
-        const HostnameResolverAnswer answer(monitor, resolved, unresolved, from_child, answer_timeout_sec);
+        const Answer answer(monitor, resolved, unresolved, from_child, answer_timeout_sec);
         try
         {
             const Util::Fork::ChildResultStatus child_result_status = parent.get_child_result_status();

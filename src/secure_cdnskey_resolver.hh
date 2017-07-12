@@ -26,16 +26,15 @@
 
 #include <string>
 #include <set>
-#include <vector>
+#include <list>
 
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional.hpp>
 
 typedef std::set<std::string> Domains;
 
-class SecureCdnskeyResolver
+struct SecureCdnskeyResolver
 {
-public:
     static void resolve(
             const Domains& _to_resolve,
             const TimeUnit::Seconds& _query_timeout_sec,
@@ -43,8 +42,6 @@ public:
             const std::list<boost::asio::ip::address>& _resolvers,
             const std::list<GetDns::Data::TrustAnchor>& _trust_anchors,
             const TimeUnit::Nanoseconds& _assigned_time_nsec);
-private:
-    class Query;
 };
 
 #endif//SECURE_CDNSKEY_RESOLVER_HH_FFBD7215A0403402C6A3E7BDD107973D

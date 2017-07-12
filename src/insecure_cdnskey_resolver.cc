@@ -52,9 +52,7 @@ struct Cdnskey
 
 typedef std::set<std::string> Nameservers;
 
-}//namespace {anonymous}
-
-class InsecureCdnskeyResolver::Query:public GetDns::Request
+class Query:public GetDns::Request
 {
 public:
     Query(const Insecure& _task,
@@ -239,6 +237,8 @@ private:
     Result result_;
 };
 
+}//namespace {anonymous}
+
 void InsecureCdnskeyResolver::resolve(
         const VectorOfInsecures& _to_resolve,
         const TimeUnit::Seconds& _query_timeout_sec,
@@ -280,7 +280,7 @@ void InsecureCdnskeyResolver::resolve(
                     if (query_ptr != NULL)
                     {
                         const Insecure to_resolve = query_ptr->get_task();
-                        const Nameservers& nameservers = to_resolve.query.nameservers;
+                        const Nameservers& nameservers = to_resolve.nameservers;
                         if (query_ptr->get_status() == Query::Status::completed)
                         {
                             const Query::Result result = query_ptr->get_result();
@@ -290,8 +290,8 @@ void InsecureCdnskeyResolver::resolve(
                                      nameserver_itr != nameservers.end(); ++nameserver_itr)
                                 {
                                     std::cout << "insecure-empty " << *nameserver_itr << " "
-                                              << to_resolve.answer.address << " "
-                                              << to_resolve.query.domain << std::endl;
+                                              << to_resolve.address << " "
+                                              << to_resolve.domain << std::endl;
                                 }
                             }
                             else
@@ -302,8 +302,8 @@ void InsecureCdnskeyResolver::resolve(
                                          nameserver_itr != nameservers.end(); ++nameserver_itr)
                                     {
                                         std::cout << "insecure " << *nameserver_itr << " "
-                                                  << to_resolve.answer.address << " "
-                                                  << to_resolve.query.domain << " "
+                                                  << to_resolve.address << " "
+                                                  << to_resolve.domain << " "
                                                   << *key_itr << std::endl;
                                     }
                                 }
@@ -315,8 +315,8 @@ void InsecureCdnskeyResolver::resolve(
                                  nameserver_itr != nameservers.end(); ++nameserver_itr)
                             {
                                 std::cout << "unresolved " << *nameserver_itr << " "
-                                          << to_resolve.answer.address << " "
-                                          << to_resolve.query.domain << std::endl;
+                                          << to_resolve.address << " "
+                                          << to_resolve.domain << std::endl;
                             }
                         }
                     }
@@ -338,9 +338,9 @@ void InsecureCdnskeyResolver::resolve(
                         new Query(*item_to_resolve_ptr_,
                                   query_timeout_sec_,
                                   transport_list_,
-                                  item_to_resolve_ptr_->answer.address));
+                                  item_to_resolve_ptr_->address));
                 solver_.add_request_for_cdnskey_resolving(
-                        item_to_resolve_ptr_->query.domain,
+                        item_to_resolve_ptr_->domain,
                         request_ptr,
                         extensions_);
                 this->set_time_of_next_query();

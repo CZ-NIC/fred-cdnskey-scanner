@@ -569,12 +569,12 @@ void resolve_hostnames_of_nameservers(
          address_itr != addresses_to_domains.end(); ++address_itr)
     {
         Insecure item;
-        item.answer.address = address_itr->first;
+        item.address = address_itr->first;
         for (DomainNameservers::const_iterator domain_itr = address_itr->second.begin();
              domain_itr != address_itr->second.end(); ++domain_itr)
         {
-            item.query.domain = domain_itr->first;
-            item.query.nameservers = domain_itr->second;
+            item.domain = domain_itr->first;
+            item.nameservers = domain_itr->second;
             result.push_back(item);
         }
     }

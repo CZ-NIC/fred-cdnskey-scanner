@@ -30,9 +30,8 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional.hpp>
 
-class HostnameResolver
+struct HostnameResolver
 {
-public:
     typedef std::map< std::string, std::set<boost::asio::ip::address> > Result;
     static Result get_result(
             const std::set<std::string>& _hostnames,
@@ -40,10 +39,6 @@ public:
             const boost::optional<GetDns::TransportList>& _transport_list,
             const std::list<boost::asio::ip::address>& _resolvers,
             const TimeUnit::Nanoseconds& _assigned_time_nsec);
-private:
-    class Query;
-    class QueryGenerator;
-    class ChildProcess;
 };
 
 #endif//HOSTNAME_RESOLVER_HH_0C273EEF65B9F6F9FD6A9F48B3CE9AA5

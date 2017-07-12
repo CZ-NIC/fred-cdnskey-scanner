@@ -55,9 +55,7 @@ struct Cdnskey
 
 typedef std::set<std::string> Nameservers;
 
-}//namespace {anonymous}
-
-class SecureCdnskeyResolver::Query:public GetDns::Request
+class Query:public GetDns::Request
 {
 public:
     Query(const std::string& _domain,
@@ -284,6 +282,8 @@ private:
     Status::Enum status_;
     Result result_;
 };
+
+}//namespace {anonymous}
 
 void SecureCdnskeyResolver::resolve(
         const Domains& _to_resolve,
