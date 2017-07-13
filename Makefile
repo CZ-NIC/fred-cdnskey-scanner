@@ -24,9 +24,12 @@ SRC_DIR = src
 BUILD_DIR = build
 EVENT_DIR := $(BUILD_DIR)/event
 GETDNS_DIR := $(BUILD_DIR)/getdns
+UTIL_DIR := $(BUILD_DIR)/util
 BINARY = $(BUILD_DIR)/cdnskey-scanner
-OBJS := $(BUILD_DIR)/main.o $(EVENT_DIR)/base.o $(GETDNS_DIR)/error.o $(GETDNS_DIR)/data.o \
-$(GETDNS_DIR)/context.o $(GETDNS_DIR)/extensions.o $(GETDNS_DIR)/rrtype.o $(GETDNS_DIR)/solver.o
+OBJS := $(BUILD_DIR)/main.o $(BUILD_DIR)/hostname_resolver.o $(BUILD_DIR)/insecure_cdnskey_resolver.o \
+$(BUILD_DIR)/secure_cdnskey_resolver.o $(BUILD_DIR)/time_unit.o $(EVENT_DIR)/base.o \
+$(GETDNS_DIR)/error.o $(GETDNS_DIR)/data.o $(GETDNS_DIR)/context.o $(GETDNS_DIR)/extensions.o \
+$(GETDNS_DIR)/rrtype.o $(GETDNS_DIR)/solver.o $(UTIL_DIR)/pipe.o $(UTIL_DIR)/fork.o
 DBG_OPT = -ggdb3
 WARN_OPT = -W -Wall
 CFLAGS := -I. $(DBG_OPT) $(WARN_OPT) -O0
@@ -40,7 +43,7 @@ $(BINARY): $(OBJS)
 	$(CXX) $(DBG_OPT) $^ -o $@ -lgetdns -lgetdns_ext_event -levent -lboost_system
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cc
-	@$(MAKE) --no-print-directory -s $(BUILD_DIR) $(EVENT_DIR) $(GETDNS_DIR)
+	@$(MAKE) --no-print-directory -s $(BUILD_DIR) $(EVENT_DIR) $(GETDNS_DIR) $(UTIL_DIR)
 	$(CXX) $(CFLAGS) -o $@ -c $(filter %.cc,$^)
 	@$(CXX) -MM $(CFLAGS) $(SRC_DIR)/$*.cc | sed "s,^.*:,$@:," > $(@:.o=.d)
 	@cp $(@:.o=.d) $(@:.o=.d.tmp)
@@ -48,14 +51,14 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cc
 	  sed -e 's/^ *//' -e 's/$$/:/' >> $(@:.o=.d)
 	@rm -f $(@:.o=.d.tmp)
 
-$(BUILD_DIR) $(EVENT_DIR) $(GETDNS_DIR):
+$(BUILD_DIR) $(EVENT_DIR) $(GETDNS_DIR) $(UTIL_DIR):
 	mkdir -p $@
 
 clean:
 	rm -rf $(BUILD_DIR)
 
 test: $(BINARY)
-	@$(BINARY) 35 \
+	@$(BINARY) 5 \
 --hostname_resolvers "172.20.20.253" \
 --cdnskey_resolvers "172.16.1.183" \
 --dnssec_trust_anchors ". 257 3 8 \
