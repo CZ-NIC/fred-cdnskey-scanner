@@ -249,7 +249,7 @@ public:
         : Event::Timeout(_solver.get_event_base()),
           solver_(_solver),
           to_resolve_(_to_resolve),
-          to_resolve_item_ptr_(_to_resolve.begin()),
+          to_resolve_itr_(_to_resolve.begin()),
           remaining_queries_(_to_resolve.size()),
           query_timeout_sec_(_query_timeout_sec),
           transport_list_(_transport_list),
@@ -314,7 +314,6 @@ public:
                 this->Event::Timeout::remove();
             }
         }
-        std::cerr << "insecure CDNSKEY records resolved" << std::endl;
     }
     ~QueryGenerator() { }
 private:
@@ -323,15 +322,15 @@ private:
         if (solver_.get_number_of_unresolved_requests() < max_number_of_unresolved_queries)
         {
             GetDns::RequestPtr request_ptr(
-                    new Query(*to_resolve_item_ptr_, query_timeout_sec_, transport_list_));
+                    new Query(*to_resolve_itr_, query_timeout_sec_, transport_list_));
             solver_.add_request_for_cdnskey_resolving(
-                    to_resolve_item_ptr_->domain,
+                    to_resolve_itr_->domain,
                     request_ptr,
                     extensions_);
             this->set_time_of_next_query();
-            if (to_resolve_item_ptr_ != to_resolve_.end())
+            if (to_resolve_itr_ != to_resolve_.end())
             {
-                ++to_resolve_item_ptr_;
+                ++to_resolve_itr_;
                 --remaining_queries_;
             }
         }
@@ -361,7 +360,7 @@ private:
     }
     GetDns::Solver& solver_;
     const VectorOfInsecures& to_resolve_;
-    VectorOfInsecures::const_iterator to_resolve_item_ptr_;
+    VectorOfInsecures::const_iterator to_resolve_itr_;
     std::size_t remaining_queries_;
     const TimeUnit::Seconds query_timeout_sec_;
     const boost::optional<GetDns::TransportList>& transport_list_;
@@ -665,7 +664,7 @@ public:
             VectorOfInsecures to_resolve;
             to_resolve.reserve(to_resolve_.size() - answered_.size());
             for (VectorOfInsecures::const_iterator to_resolve_itr = to_resolve_.begin();
-                    to_resolve_itr != to_resolve_.end(); ++to_resolve_itr)
+                 to_resolve_itr != to_resolve_.end(); ++to_resolve_itr)
             {
                 const bool resolved = answered_.find(QueryDone(*to_resolve_itr)) != answered_.end();
                 if (!resolved)
@@ -728,7 +727,7 @@ void InsecureCdnskeyResolver::resolve(
             {
                 if (child_result_status.get_exit_status() == EXIT_SUCCESS)
                 {
-                    std::cerr << "child process successfully done" << std::endl;
+                    std::cerr << "insecure CDNSKEY records resolved" << std::endl;
                     if (answered.size() < _to_resolve.size())
                     {
                         throw std::runtime_error("insecure CDNSKEY resolver doesn't completed its job");

@@ -233,7 +233,6 @@ public:
                 this->Event::Timeout::remove();
             }
         }
-        std::cerr << "hostnames resolved" << std::endl;
     }
     ~QueryGenerator() { }
 private:
@@ -632,7 +631,7 @@ HostnameResolver::Result HostnameResolver::get_result(
             {
                 if (child_result_status.get_exit_status() == EXIT_SUCCESS)
                 {
-                    std::cerr << "child process successfully done" << std::endl;
+                    std::cerr << "hostnames A and AAAA records resolved" << std::endl;
                     if ((resolved.size() + unresolved.size()) < _hostnames.size())
                     {
                         throw std::runtime_error("hostname resolver doesn't completed its job");
