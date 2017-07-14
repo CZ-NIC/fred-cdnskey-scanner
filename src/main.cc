@@ -259,17 +259,18 @@ int main(int, char* argv[])
                     hostname_resolvers,
                     insecure_queries);
         }
-        const TimeUnit::Nanoseconds time_to_the_end = t_end - TimeUnit::get_clock_monotonic();
-        if (time_to_the_end.value <= 0)
-        {
-            std::cerr << "lack of time" << std::endl;
-            return EXIT_FAILURE;
-        }
         const std::size_t number_of_insecure_queries = insecure_queries.size();
         std::cerr << "number_of_insecure_queries = " << number_of_insecure_queries << std::endl;
         const std::size_t number_of_secure_queries = domains_to_scanning.get_number_of_secure_domains();
         std::cerr << "number_of_secure_queries = " << number_of_secure_queries << std::endl;
         const std::size_t total_number_of_queries = number_of_insecure_queries + number_of_secure_queries;
+        const std::size_t max_number_of_queries_per_second = 1000;
+        const TimeUnit::Nanoseconds min_runtime(total_number_of_queries / (max_number_of_queries_per_second / 1.0e+9));
+        TimeUnit::Nanoseconds time_to_the_end = t_end - TimeUnit::get_clock_monotonic();
+        if (time_to_the_end.value < min_runtime.value)
+        {
+            time_to_the_end = min_runtime;
+        }
         const double query_distance_nsec = double(time_to_the_end.value) / total_number_of_queries;
         std::cerr << "query_distance = " << query_distance_nsec << "ns" << std::endl;
         const TimeUnit::Nanoseconds time_for_insecure_resolver((query_distance_nsec * number_of_insecure_queries) + 0.5);
