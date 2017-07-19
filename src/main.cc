@@ -27,6 +27,9 @@
 #include "src/getdns/exception.hh"
 #include "src/getdns/error.hh"
 
+#include <sys/time.h>
+#include <sys/resource.h>
+
 #include <algorithm>
 #include <string>
 #include <set>
@@ -39,6 +42,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <cerrno>
 
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional.hpp>
@@ -221,6 +225,39 @@ int main(int, char* argv[])
         {
             std::cerr << "lack of time" << std::endl;
             return EXIT_FAILURE;
+        }
+        {
+            struct ::rlimit limit;
+            const int success = 0;
+            if (::getrlimit(RLIMIT_NOFILE, &limit) == success)
+            {
+                std::cerr << "getrlimit(RLIMIT_NOFILE, {" << limit.rlim_cur << ", " << limit.rlim_max << "})" << std::endl;
+                const ::rlim_t min_nofile_value = 8192;
+                if (limit.rlim_cur < min_nofile_value)
+                {
+                    const ::rlim_t new_nofile_value = min_nofile_value <= limit.rlim_max ? min_nofile_value : limit.rlim_max;
+                    if (limit.rlim_cur < new_nofile_value)
+                    {
+                        limit.rlim_cur = new_nofile_value;
+                        if (::setrlimit(RLIMIT_NOFILE, &limit) == success)
+                        {
+                            std::cerr << "setrlimit(RLIMIT_NOFILE, {" << limit.rlim_cur << ", " << limit.rlim_max << "})"
+                                      << std::endl;
+                        }
+                        else
+                        {
+                            const int c_errno = errno;
+                            std::cerr << "setrlimit(RLIMIT_NOFILE, {" << limit.rlim_cur << ", " << limit.rlim_max << "}) "
+                                         "failed: " << std::strerror(c_errno) << std::endl;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                const int c_errno = errno;
+                std::cerr << "getrlimit(RLIMIT_NOFILE) failed: " << std::strerror(c_errno) << std::endl;
+            }
         }
         const std::list<boost::asio::ip::address> hostname_resolvers = split(hostname_resolvers_opt, ",", append_ip_address);
         const std::list<boost::asio::ip::address> cdnskey_resolvers = split(cdnskey_resolvers_opt, ",", append_ip_address);
