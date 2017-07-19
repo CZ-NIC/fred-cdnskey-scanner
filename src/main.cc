@@ -283,7 +283,7 @@ int main(int, char* argv[])
         SecureCdnskeyResolver::resolve(
                 domains_to_scanning.get_signed_domains(),
                 query_timeout,
-                tcp_only,
+                udp_first,
                 cdnskey_resolvers,
                 anchors,
                 time_for_secure_resolver);
