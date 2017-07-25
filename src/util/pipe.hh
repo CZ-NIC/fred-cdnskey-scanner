@@ -44,7 +44,7 @@ private:
     friend class ImWriter;
 };
 
-class ImReader:public boost::noncopyable
+class ImReader:private boost::noncopyable
 {
 public:
     ImReader(Pipe& _pipe);
@@ -55,7 +55,7 @@ private:
     Pipe& pipe_;
 };
 
-class ImWriter:public boost::noncopyable
+class ImWriter:private boost::noncopyable
 {
 public:
     enum Stream
