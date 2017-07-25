@@ -23,6 +23,8 @@
 
 #include <getdns/getdns_ext_libevent.h>
 
+#include <vector>
+
 namespace GetDns
 {
 
@@ -99,11 +101,11 @@ Context::~Context()
 
 Context& Context::set_dns_transport_list(const TransportList& _transport_list)
 {
-    ::getdns_transport_list_t list[_transport_list.size()];
-    ::getdns_transport_list_t* item_ptr = list;
+    std::vector< ::getdns_transport_list_t > list;
+    list.reserve(_transport_list.size());
     for (TransportList::const_iterator transport = _transport_list.begin();
          transport != _transport_list.end();
-         ++transport, ++item_ptr)
+         ++transport)
     {
         class Convert
         {
@@ -126,12 +128,12 @@ Context& Context::set_dns_transport_list(const TransportList& _transport_list)
         private:
             const Transport::Protocol what_;
         };
-        *item_ptr = Convert(*transport).into_enum();
+        list.push_back(Convert(*transport).into_enum());
     }
     const ::getdns_return_t retval = ::getdns_context_set_dns_transport_list(
             free_on_exit_.context_ptr,
             _transport_list.size(),
-            list);
+            &(*list.begin()));
     if (retval != ::GETDNS_RETURN_GOOD)
     {
         struct ContextSetDnsTransportListException:Error
