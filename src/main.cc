@@ -56,11 +56,11 @@ namespace {
 typedef std::set<std::string> Nameservers;
 typedef std::set<std::string> Domains;
 
-class DomainsToScanning
+class DomainsToScan
 {
 public:
-    DomainsToScanning(std::istream& _data_source);
-    ~DomainsToScanning();
+    DomainsToScan(std::istream& _data_source);
+    ~DomainsToScan();
     std::size_t get_number_of_nameservers()const;
     std::size_t get_number_of_domains()const;
     std::size_t get_number_of_secure_domains()const;
@@ -68,7 +68,7 @@ public:
     const Domains& get_signed_domains()const;
     Domains get_unsigned_domains_of(const std::string& _nameserver)const;
 private:
-    DomainsToScanning& append_data(const char* _data_chunk, std::streamsize _data_chunk_length);
+    DomainsToScan& append_data(const char* _data_chunk, std::streamsize _data_chunk_length);
     void data_finished();
     enum Section
     {
@@ -86,9 +86,9 @@ private:
 };
 
 void resolve_hostnames_of_nameservers(
-        const DomainsToScanning& domains_to_scanning,
-        const TimeUnit::Seconds& timeout_sec,
-        const TimeUnit::Nanoseconds& runtime_usec,
+        const DomainsToScan& domains_to_scan,
+        const TimeUnit::Seconds& query_timeout_sec,
+        const TimeUnit::Nanoseconds& runtime_nsec,
         const boost::optional<GetDns::TransportList>& transport_list,
         const std::list<boost::asio::ip::address>& resolvers,
         VectorOfInsecures& result);
@@ -265,9 +265,9 @@ int main(int, char* argv[])
         const TimeUnit::Seconds timeout_default(10);
         const TimeUnit::Seconds query_timeout = timeout_opt.empty() ? timeout_default
                                                           : TimeUnit::Seconds(boost::lexical_cast< ::uint64_t >(timeout_opt));
-        const DomainsToScanning domains_to_scanning(std::cin);
-        if ((domains_to_scanning.get_number_of_nameservers() <= 0) &&
-            (domains_to_scanning.get_number_of_secure_domains() <= 0))
+        const DomainsToScan domains_to_scan(std::cin);
+        if ((domains_to_scan.get_number_of_nameservers() <= 0) &&
+            (domains_to_scan.get_number_of_secure_domains() <= 0))
         {
             return EXIT_SUCCESS;
         }
@@ -280,16 +280,16 @@ int main(int, char* argv[])
         VectorOfInsecures insecure_queries;
         {
             const std::size_t estimated_total_number_of_queries =
-                    domains_to_scanning.get_number_of_nameservers() + 2 * domains_to_scanning.get_number_of_domains();
+                    domains_to_scan.get_number_of_nameservers() + 2 * domains_to_scan.get_number_of_domains();
             std::cerr << "estimated_total_number_of_queries = " << estimated_total_number_of_queries << std::endl;
             const double query_distance = double(runtime.value) / estimated_total_number_of_queries;
             std::cerr << "query_distance = " << query_distance << std::endl;
-            const std::size_t queries_to_ask_now = domains_to_scanning.get_number_of_nameservers();
+            const std::size_t queries_to_ask_now = domains_to_scan.get_number_of_nameservers();
             std::cerr << "queries_to_ask_now = " << queries_to_ask_now << std::endl;
             const TimeUnit::Nanoseconds time_for_hostname_resolver(query_distance * queries_to_ask_now * 1000000000LL);
             std::cerr << "time_for_hostname_resolver = " << time_for_hostname_resolver.value << "ns" << std::endl;
             resolve_hostnames_of_nameservers(
-                    domains_to_scanning,
+                    domains_to_scan,
                     query_timeout,
                     time_for_hostname_resolver,
                     udp_first,
@@ -298,7 +298,7 @@ int main(int, char* argv[])
         }
         const std::size_t number_of_insecure_queries = insecure_queries.size();
         std::cerr << "number_of_insecure_queries = " << number_of_insecure_queries << std::endl;
-        const std::size_t number_of_secure_queries = domains_to_scanning.get_number_of_secure_domains();
+        const std::size_t number_of_secure_queries = domains_to_scan.get_number_of_secure_domains();
         std::cerr << "number_of_secure_queries = " << number_of_secure_queries << std::endl;
         const std::size_t total_number_of_queries = number_of_insecure_queries + number_of_secure_queries;
         const std::size_t max_number_of_queries_per_second = 1000;
@@ -318,7 +318,7 @@ int main(int, char* argv[])
                 tcp_only,
                 time_for_insecure_resolver);
         SecureCdnskeyResolver::resolve(
-                domains_to_scanning.get_signed_domains(),
+                domains_to_scan.get_signed_domains(),
                 query_timeout,
                 udp_first,
                 cdnskey_resolvers,
@@ -355,7 +355,7 @@ int main(int, char* argv[])
 
 namespace {
 
-DomainsToScanning::DomainsToScanning(std::istream& _data_source)
+DomainsToScan::DomainsToScan(std::istream& _data_source)
     : section_(none),
       data_starts_at_new_line_(true)
 {
@@ -374,16 +374,16 @@ DomainsToScanning::DomainsToScanning(std::istream& _data_source)
     this->data_finished();
 }
 
-DomainsToScanning::~DomainsToScanning()
+DomainsToScan::~DomainsToScan()
 {
 }
 
-std::size_t DomainsToScanning::get_number_of_nameservers()const
+std::size_t DomainsToScan::get_number_of_nameservers()const
 {
     return unsigned_domains_of_namserver_.size();
 }
 
-std::size_t DomainsToScanning::get_number_of_domains()const
+std::size_t DomainsToScan::get_number_of_domains()const
 {
     std::size_t sum_count = signed_domains_.size();
     for (DomainsOfNamserver::const_iterator itr = unsigned_domains_of_namserver_.begin();
@@ -394,7 +394,7 @@ std::size_t DomainsToScanning::get_number_of_domains()const
     return sum_count;
 }
 
-std::size_t DomainsToScanning::get_number_of_secure_domains()const
+std::size_t DomainsToScan::get_number_of_secure_domains()const
 {
     return signed_domains_.size();
 }
@@ -402,7 +402,7 @@ std::size_t DomainsToScanning::get_number_of_secure_domains()const
 const char section_of_signed_domains[] = "[secure]";
 const char section_of_unsigned_domains[] = "[insecure]";
 
-DomainsToScanning& DomainsToScanning::append_data(const char* _data_chunk, std::streamsize _data_chunk_length)
+DomainsToScan& DomainsToScan::append_data(const char* _data_chunk, std::streamsize _data_chunk_length)
 {
     const char* const data_end = _data_chunk + _data_chunk_length;
     const char* item_begin = _data_chunk;
@@ -508,7 +508,7 @@ DomainsToScanning& DomainsToScanning::append_data(const char* _data_chunk, std::
     return *this;
 }
 
-void DomainsToScanning::data_finished()
+void DomainsToScan::data_finished()
 {
     const std::string item = rest_of_data_;
     const bool check_section_flag = data_starts_at_new_line_;
@@ -558,8 +558,8 @@ void DomainsToScanning::data_finished()
 }
 
 void resolve_hostnames_of_nameservers(
-        const DomainsToScanning& domains_to_scanning,
-        const TimeUnit::Seconds& query_timeout,
+        const DomainsToScan& domains_to_scan,
+        const TimeUnit::Seconds& query_timeout_sec,
         const TimeUnit::Nanoseconds& runtime_nsec,
         const boost::optional<GetDns::TransportList>& transport_list,
         const std::list<boost::asio::ip::address>& resolvers,
@@ -570,10 +570,10 @@ void resolve_hostnames_of_nameservers(
     typedef std::map<std::string, Nameservers> DomainNameservers;
     typedef std::map<boost::asio::ip::address, DomainNameservers> IpAddressesToDomainNameservers;
 //    GetDns::Extensions extensions;
-    const Nameservers nameservers = domains_to_scanning.get_nameservers();
+    const Nameservers nameservers = domains_to_scan.get_nameservers();
     const HostnameResolver::Result nameserver_addresses = HostnameResolver::get_result(
             nameservers,
-            query_timeout,
+            query_timeout_sec,
             transport_list,
             resolvers,
             runtime_nsec);
@@ -584,7 +584,7 @@ void resolve_hostnames_of_nameservers(
     {
         const std::string nameserver = nameserver_itr->first;
 //        std::cerr << nameserver;
-        const Domains domains = domains_to_scanning.get_unsigned_domains_of(nameserver);
+        const Domains domains = domains_to_scan.get_unsigned_domains_of(nameserver);
         for (IpAddresses::const_iterator address_itr = nameserver_itr->second.begin();
              address_itr != nameserver_itr->second.end(); ++address_itr)
         {
@@ -622,7 +622,7 @@ void resolve_hostnames_of_nameservers(
     std::random_shuffle(result.begin(), result.end());
 }
 
-Nameservers DomainsToScanning::get_nameservers()const
+Nameservers DomainsToScan::get_nameservers()const
 {
     Nameservers nameservers;
     for (DomainsOfNamserver::const_iterator nameserver_itr = unsigned_domains_of_namserver_.begin();
@@ -633,12 +633,12 @@ Nameservers DomainsToScanning::get_nameservers()const
     return nameservers;
 }
 
-const Domains& DomainsToScanning::get_signed_domains()const
+const Domains& DomainsToScan::get_signed_domains()const
 {
     return signed_domains_;
 }
 
-Domains DomainsToScanning::get_unsigned_domains_of(const std::string& _nameserver)const
+Domains DomainsToScan::get_unsigned_domains_of(const std::string& _nameserver)const
 {
     DomainsOfNamserver::const_iterator nameserver_itr = unsigned_domains_of_namserver_.find(_nameserver);
     const bool nameserver_found = nameserver_itr != unsigned_domains_of_namserver_.end();
