@@ -128,22 +128,22 @@ void Solver::getdns_callback_function(
         }
         catch (const std::exception& e)
         {
-            std::cerr << "std::exception catched: " << e.what() << std::endl;
+            std::cerr << "std::exception caught: " << e.what() << std::endl;
         }
         catch (...)
         {
-            std::cerr << "unexpected exception catched" << std::endl;
+            std::cerr << "unexpected exception caught" << std::endl;
         }
         solver_instance_ptr->finished_requests_.push_back(request_itr->second);
         solver_instance_ptr->active_requests_.erase(request_itr);
     }
     catch (const std::exception& e)
     {
-        std::cerr << "std::exception catched: " << e.what() << std::endl;
+        std::cerr << "std::exception caught: " << e.what() << std::endl;
     }
     catch (...)
     {
-        std::cerr << "unexpected exception catched" << std::endl;
+        std::cerr << "unexpected exception caught" << std::endl;
     }
 }
 
