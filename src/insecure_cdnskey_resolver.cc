@@ -29,6 +29,9 @@
 
 #include <stdint.h>
 
+#include <cstddef>
+
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <set>
@@ -459,34 +462,42 @@ public:
 private:
     static const char* skip_to(const char* begin, const char* end, char stop)
     {
-        for (const char* pos = begin; pos < end; ++pos)
+        const char* position_of_stop_character = std::find(begin, end, stop);
+        const bool end_reached = position_of_stop_character == end;
+        if (!end_reached)
         {
-            if (*pos == stop)
-            {
-                return pos;
-            }
+            return position_of_stop_character;
         }
         throw std::runtime_error("stop character not found");
     }
     void line_received(const char* _line_begin, const char* _line_end)
     {
-        const int string_equal = 0;
-        const char* const prefix = _line_begin;
+        const int number_of_known_prefixes = 3;
+        const char* const known_prefixes[number_of_known_prefixes] =
+            {
+                "insecure",
+                "insecure-empty",
+                "unresolved"
+            };
+        const std::ptrdiff_t insecure_prefix_idx = 0;
+        const char* const* end_of_known_prefixes = known_prefixes + number_of_known_prefixes;
         const char* nameserver_begin = NULL;
-        const bool cdnskey_record_found = std::strncmp(prefix, "insecure ", std::strlen("insecure ")) == string_equal;
-        if (cdnskey_record_found)
+        const char* const* known_prefix_ptr = known_prefixes;
+        while (known_prefix_ptr < end_of_known_prefixes)
         {
-            nameserver_begin = prefix + std::strlen("insecure ");
+            const char* const prefix = *known_prefix_ptr;
+            const ::size_t prefix_len = std::strlen(prefix);
+            const int string_equal = 0;
+            const bool prefix_candidate_found = std::strncmp(_line_begin, prefix, prefix_len) == string_equal;
+            const bool prefix_found = prefix_candidate_found && (_line_begin[prefix_len] == ' ');
+            if (prefix_found)
+            {
+                nameserver_begin = _line_begin + prefix_len + 1;
+                break;
+            }
+            ++known_prefix_ptr;
         }
-        else if (std::strncmp(prefix, "insecure-empty ", std::strlen("insecure-empty ")) == string_equal)
-        {
-            nameserver_begin = prefix + std::strlen("insecure-empty ");
-        }
-        else if (std::strncmp(prefix, "unresolved ", std::strlen("unresolved ")) == string_equal)
-        {
-            nameserver_begin = prefix + std::strlen("unresolved ");
-        }
-        else
+        if (nameserver_begin == NULL)
         {
             throw std::runtime_error("invalid data received");
         }
@@ -498,6 +509,7 @@ private:
             const std::string address_str(address_begin, address_end - address_begin);
             boost::asio::ip::address address(boost::asio::ip::address::from_string(address_str));
             const char* const domain_begin = address_end + 1;
+            const bool cdnskey_record_found = (known_prefix_ptr - known_prefixes) == insecure_prefix_idx;
             const char* const domain_end = cdnskey_record_found ? skip_to(domain_begin, _line_end, ' ')
                                                                 : _line_end;
             const std::string domain(domain_begin, domain_end - domain_begin);
