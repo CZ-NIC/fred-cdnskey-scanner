@@ -193,7 +193,7 @@ Timeout& Timeout::remove()
 
 void Timeout::on_event(short _events)
 {
-    if ((_events && EV_TIMEOUT) != 0)
+    if ((_events & EV_TIMEOUT) != 0)
     {
         this->on_timeout_occurrence();
     }
