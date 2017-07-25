@@ -680,7 +680,6 @@ void append_trust_anchor(const std::string& item, std::list<GetDns::Data::TrustA
     int flags;
     int protocol;
     int algorithm;
-    std::string public_key;
     std::string base64_encoded_public_key;
     anchor_stream >> zone
                   >> flags

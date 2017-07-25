@@ -101,26 +101,6 @@ public:
     }
     struct Result
     {
-        struct Trustiness
-        {
-            enum Enum
-            {
-                insecure,
-                secure,
-                bogus
-            };
-            friend std::ostream& operator<<(std::ostream& out, Enum value)
-            {
-                switch (value)
-                {
-                    case insecure: return out << "insecure";
-                    case secure: return out << "secure";
-                    case bogus: return out << "bogus";
-                }
-                return out << "unknown";
-            }
-        };
-        Trustiness::Enum trustiness;
         std::vector<Cdnskey> cdnskeys;
     };
     const Result& get_result()const
