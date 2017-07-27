@@ -103,14 +103,21 @@ extern const char cmdline_help_text[];
 
 }//namespace {anonymous}
 
-int main(int, char* argv[])
+int main(int argc, char* argv[])
 {
+    if ((argc <= 0) || (argv[0] == NULL))
+    {
+        std::cerr << "main() arguments are crazy" << std::endl;
+        return EXIT_SUCCESS;
+    }
     std::string hostname_resolvers_opt;
     std::string cdnskey_resolvers_opt;
     std::string dnssec_trust_anchors_opt;
     std::string timeout_opt;
     std::string runtime_opt;
-    for (char** arg_ptr = argv + 1; *arg_ptr != NULL; ++arg_ptr)
+    char** const arg_end = argv + argc;
+    char** arg_ptr = argv + 1;
+    while ((arg_ptr != arg_end) && (*arg_ptr != NULL))
     {
         const int are_the_same = 0;
         if (std::strcmp(*arg_ptr, "--hostname_resolvers") == are_the_same)
@@ -212,10 +219,16 @@ int main(int, char* argv[])
                 return EXIT_FAILURE;
             }
         }
+        ++arg_ptr;
     }
     if (runtime_opt.empty())
     {
         std::cerr << "runtime value has to be set" << std::endl;
+        return EXIT_FAILURE;
+    }
+    else if (runtime_opt[0] == '-')
+    {
+        std::cerr << "unknown option: " << runtime_opt << std::endl;
         return EXIT_FAILURE;
     }
     try
@@ -569,7 +582,6 @@ void resolve_hostnames_of_nameservers(
     typedef std::map<std::string, IpAddresses> IpAddressesOfNameservers;
     typedef std::map<std::string, Nameservers> DomainNameservers;
     typedef std::map<boost::asio::ip::address, DomainNameservers> IpAddressesToDomainNameservers;
-//    GetDns::Extensions extensions;
     const Nameservers nameservers = domains_to_scan.get_nameservers();
     const HostnameResolver::Result nameserver_addresses = HostnameResolver::get_result(
             nameservers,
@@ -583,19 +595,16 @@ void resolve_hostnames_of_nameservers(
          nameserver_itr != nameserver_addresses.end(); ++nameserver_itr)
     {
         const std::string nameserver = nameserver_itr->first;
-//        std::cerr << nameserver;
         const Domains domains = domains_to_scan.get_unsigned_domains_of(nameserver);
         for (IpAddresses::const_iterator address_itr = nameserver_itr->second.begin();
              address_itr != nameserver_itr->second.end(); ++address_itr)
         {
-//            std::cerr << " " << *address_itr;
             DomainNameservers& domain_nameservers = addresses_to_domains[*address_itr];
             for (Domains::const_iterator domain_itr = domains.begin(); domain_itr != domains.end(); ++domain_itr)
             {
                 domain_nameservers[*domain_itr].insert(nameserver);
             }
         }
-//        std::cerr << std::endl;
     }
 
     std::size_t number_of_items = 0;

@@ -144,7 +144,6 @@ private:
     }
     void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t)
     {
-//        std::cerr << _answer << std::endl;
         status_ = Status::completed;
         result_.clear();
         const GetDns::Data::Value replies_tree = GetDns::Data::get<GetDns::Data::List>(_answer, "replies_tree");
@@ -161,7 +160,6 @@ private:
                 continue;
             }
             const GetDns::Data::Dict reply = GetDns::Data::From(reply_value).get_value_of<GetDns::Data::Dict>();
-    //        std::cout << "reply[" << reply_idx << "]:\n" << reply << std::endl;
             const GetDns::Data::Value answer_value = GetDns::Data::get<GetDns::Data::List>(reply, "answer");
             if (!GetDns::Data::Is(answer_value).of<GetDns::Data::List>().type)
             {
