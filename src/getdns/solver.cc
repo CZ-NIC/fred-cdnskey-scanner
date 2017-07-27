@@ -89,8 +89,6 @@ Event::Base& Solver::get_event_base()
     return event_base_;
 }
 
-extern "C" {
-
 void Solver::getdns_callback_function(
         ::getdns_context*,
         ::getdns_callback_type_t _callback_type,
@@ -102,7 +100,7 @@ void Solver::getdns_callback_function(
     {
         const Data::Dict answer(_response);
         Solver* const solver_instance_ptr = reinterpret_cast<Solver*>(_user_data_ptr);
-        RequestId::iterator request_itr = solver_instance_ptr->active_requests_.find(_transaction_id);
+        const RequestId::iterator request_itr = solver_instance_ptr->active_requests_.find(_transaction_id);
         if (request_itr == solver_instance_ptr->active_requests_.end())
         {
             return;
@@ -145,8 +143,6 @@ void Solver::getdns_callback_function(
     {
         std::cerr << "unexpected exception caught" << std::endl;
     }
-}
-
 }
 
 }//namespace GetDns

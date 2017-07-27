@@ -640,7 +640,7 @@ const Domains& DomainsToScan::get_signed_domains()const
 
 Domains DomainsToScan::get_unsigned_domains_of(const std::string& _nameserver)const
 {
-    DomainsOfNamserver::const_iterator nameserver_itr = unsigned_domains_of_namserver_.find(_nameserver);
+    const DomainsOfNamserver::const_iterator nameserver_itr = unsigned_domains_of_namserver_.find(_nameserver);
     const bool nameserver_found = nameserver_itr != unsigned_domains_of_namserver_.end();
     if (nameserver_found)
     {
