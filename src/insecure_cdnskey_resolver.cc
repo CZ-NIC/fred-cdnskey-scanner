@@ -5,7 +5,7 @@
  *
  * FRED is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 2 of the License.
+ * the Free Software Foundation, version 3 of the License.
  *
  * FRED is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -29,6 +29,9 @@
 
 #include <stdint.h>
 
+#include <cstddef>
+
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <set>
@@ -141,7 +144,6 @@ private:
     }
     void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t)
     {
-//        std::cerr << _answer << std::endl;
         status_ = Status::completed;
         result_.clear();
         const GetDns::Data::Value replies_tree = GetDns::Data::get<GetDns::Data::List>(_answer, "replies_tree");
@@ -158,7 +160,6 @@ private:
                 continue;
             }
             const GetDns::Data::Dict reply = GetDns::Data::From(reply_value).get_value_of<GetDns::Data::Dict>();
-    //        std::cout << "reply[" << reply_idx << "]:\n" << reply << std::endl;
             const GetDns::Data::Value answer_value = GetDns::Data::get<GetDns::Data::List>(reply, "answer");
             if (!GetDns::Data::Is(answer_value).of<GetDns::Data::List>().type)
             {
@@ -459,34 +460,42 @@ public:
 private:
     static const char* skip_to(const char* begin, const char* end, char stop)
     {
-        for (const char* pos = begin; pos < end; ++pos)
+        const char* position_of_stop_character = std::find(begin, end, stop);
+        const bool end_reached = position_of_stop_character == end;
+        if (!end_reached)
         {
-            if (*pos == stop)
-            {
-                return pos;
-            }
+            return position_of_stop_character;
         }
         throw std::runtime_error("stop character not found");
     }
     void line_received(const char* _line_begin, const char* _line_end)
     {
-        const int string_equal = 0;
-        const char* const prefix = _line_begin;
+        const int number_of_known_prefixes = 3;
+        const char* const known_prefixes[number_of_known_prefixes] =
+            {
+                "insecure",
+                "insecure-empty",
+                "unresolved"
+            };
+        const std::ptrdiff_t insecure_prefix_idx = 0;
+        const char* const* end_of_known_prefixes = known_prefixes + number_of_known_prefixes;
         const char* nameserver_begin = NULL;
-        const bool cdnskey_record_found = std::strncmp(prefix, "insecure ", std::strlen("insecure ")) == string_equal;
-        if (cdnskey_record_found)
+        const char* const* known_prefix_ptr = known_prefixes;
+        while (known_prefix_ptr < end_of_known_prefixes)
         {
-            nameserver_begin = prefix + std::strlen("insecure ");
+            const char* const prefix = *known_prefix_ptr;
+            const ::size_t prefix_len = std::strlen(prefix);
+            const int string_equal = 0;
+            const bool prefix_candidate_found = std::strncmp(_line_begin, prefix, prefix_len) == string_equal;
+            const bool prefix_found = prefix_candidate_found && (_line_begin[prefix_len] == ' ');
+            if (prefix_found)
+            {
+                nameserver_begin = _line_begin + prefix_len + 1;
+                break;
+            }
+            ++known_prefix_ptr;
         }
-        else if (std::strncmp(prefix, "insecure-empty ", std::strlen("insecure-empty ")) == string_equal)
-        {
-            nameserver_begin = prefix + std::strlen("insecure-empty ");
-        }
-        else if (std::strncmp(prefix, "unresolved ", std::strlen("unresolved ")) == string_equal)
-        {
-            nameserver_begin = prefix + std::strlen("unresolved ");
-        }
-        else
+        if (nameserver_begin == NULL)
         {
             throw std::runtime_error("invalid data received");
         }
@@ -498,6 +507,7 @@ private:
             const std::string address_str(address_begin, address_end - address_begin);
             boost::asio::ip::address address(boost::asio::ip::address::from_string(address_str));
             const char* const domain_begin = address_end + 1;
+            const bool cdnskey_record_found = (known_prefix_ptr - known_prefixes) == insecure_prefix_idx;
             const char* const domain_end = cdnskey_record_found ? skip_to(domain_begin, _line_end, ' ')
                                                                 : _line_end;
             const std::string domain(domain_begin, domain_end - domain_begin);

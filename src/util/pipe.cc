@@ -5,7 +5,7 @@
  *
  * FRED is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 2 of the License.
+ * the Free Software Foundation, version 3 of the License.
  *
  * FRED is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -112,8 +112,8 @@ void ImReader::set_nonblocking()const
     {
         FcntlFailed(int error_code):std::runtime_error(std::string("fcntl() failed: ") + std::strerror(error_code)) { }
     };
-    static const long failure = -1;
-    const long current_flags = ::fcntl(this->get_descriptor(), F_GETFL);
+    static const int failure = -1;
+    const int current_flags = ::fcntl(this->get_descriptor(), F_GETFL);
     if (current_flags == failure)
     {
         throw FcntlFailed(errno);
@@ -123,7 +123,7 @@ void ImReader::set_nonblocking()const
     {
         return;
     }
-    const long new_flags = current_flags | O_NONBLOCK;
+    const int new_flags = current_flags | O_NONBLOCK;
     static const int success = 0;
     if (::fcntl(this->get_descriptor(), F_SETFL, new_flags) != success)
     {

@@ -5,7 +5,7 @@
  *
  * FRED is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 2 of the License.
+ * the Free Software Foundation, version 3 of the License.
  *
  * FRED is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -89,8 +89,6 @@ Event::Base& Solver::get_event_base()
     return event_base_;
 }
 
-extern "C" {
-
 void Solver::getdns_callback_function(
         ::getdns_context*,
         ::getdns_callback_type_t _callback_type,
@@ -102,7 +100,7 @@ void Solver::getdns_callback_function(
     {
         const Data::Dict answer(_response);
         Solver* const solver_instance_ptr = reinterpret_cast<Solver*>(_user_data_ptr);
-        RequestId::iterator request_itr = solver_instance_ptr->active_requests_.find(_transaction_id);
+        const RequestId::iterator request_itr = solver_instance_ptr->active_requests_.find(_transaction_id);
         if (request_itr == solver_instance_ptr->active_requests_.end())
         {
             return;
@@ -128,25 +126,23 @@ void Solver::getdns_callback_function(
         }
         catch (const std::exception& e)
         {
-            std::cerr << "std::exception catched: " << e.what() << std::endl;
+            std::cerr << "std::exception caught: " << e.what() << std::endl;
         }
         catch (...)
         {
-            std::cerr << "unexpected exception catched" << std::endl;
+            std::cerr << "unexpected exception caught" << std::endl;
         }
         solver_instance_ptr->finished_requests_.push_back(request_itr->second);
         solver_instance_ptr->active_requests_.erase(request_itr);
     }
     catch (const std::exception& e)
     {
-        std::cerr << "std::exception catched: " << e.what() << std::endl;
+        std::cerr << "std::exception caught: " << e.what() << std::endl;
     }
     catch (...)
     {
-        std::cerr << "unexpected exception catched" << std::endl;
+        std::cerr << "unexpected exception caught" << std::endl;
     }
-}
-
 }
 
 }//namespace GetDns
