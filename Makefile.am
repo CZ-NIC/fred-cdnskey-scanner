@@ -21,9 +21,9 @@ AM_CXXFLAGS = \
 
 SUBDIRS = .
 
-bin_PROGRAMS = cdnskeys-scanner
+bin_PROGRAMS = cdnskey-scanner
 
-cdnskeys_scanner_SOURCES = \
+cdnskey_scanner_SOURCES = \
 	src/main.cc \
 	src/hostname_resolver.cc \
 	src/insecure_cdnskey_resolver.cc \
@@ -39,7 +39,7 @@ cdnskeys_scanner_SOURCES = \
 	src/util/pipe.cc \
 	src/util/fork.cc
 
-cdnskeys_scanner_LDADD = \
+cdnskey_scanner_LDADD = \
 		$(GETDNS_LIBS) \
 		$(GETDNSEXTRA_LIBS) \
 		$(LIBEVENT_LIBS) \
