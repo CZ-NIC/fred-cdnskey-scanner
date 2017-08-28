@@ -37,7 +37,27 @@ cdnskey_scanner_SOURCES = \
 	src/getdns/rrtype.cc \
 	src/getdns/solver.cc \
 	src/util/pipe.cc \
-	src/util/fork.cc
+	src/util/fork.cc \
+	src/hostname_resolver.hh \
+	src/time_unit.hh \
+	src/getdns/transport.hh \
+	src/getdns/data.hh \
+	src/getdns/context.hh \
+	src/getdns/extensions.hh \
+	src/getdns/solver.hh \
+	src/getdns/request.hh \
+	src/getdns/error.hh \
+	src/getdns/rrtype.hh \
+	src/getdns/exception.hh \
+	src/getdns/solver_fwd.hh \
+	src/insecure_cdnskey_resolver.hh \
+	src/secure_cdnskey_resolver.hh \
+	src/hostname_resolver.hh \
+	src/time_unit.hh \
+	src/event/base.hh \
+	src/util/fork.hh \
+	src/util/pipe.hh \
+	test/data.txt
 
 cdnskey_scanner_LDADD = \
 		$(GETDNS_LIBS) \
