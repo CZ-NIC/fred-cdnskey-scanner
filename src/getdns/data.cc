@@ -192,7 +192,7 @@ Data::Dict Data::Dict::get_trust_anchor(
         ::uint16_t _flags,
         ::uint8_t _protocol,
         ::uint8_t _algorithm,
-         const std::string& _public_key)
+         const Binary& _public_key)
 {
     GetDns::Data::Dict anchor;
     GetDns::Data::set_item_of(anchor, "class", static_cast< ::uint32_t >(GETDNS_RRCLASS_IN));
@@ -234,8 +234,8 @@ Data::Dict Data::Dict::get_trust_anchor(
     GetDns::Data::set_item_of(rdata, "protocol", static_cast< ::uint32_t >(_protocol));
     GetDns::Data::set_item_of(rdata, "algorithm", static_cast< ::uint32_t >(_algorithm));
     ::getdns_bindata public_key;
-    public_key.size = _public_key.size();
-    public_key.data = const_cast< ::uint8_t* >(reinterpret_cast<const ::uint8_t*>(_public_key.data()));
+    public_key.size = _public_key.get_length();
+    public_key.data = reinterpret_cast< ::uint8_t* >(const_cast<void*>(_public_key.get_binary_data()));
     GetDns::Data::set_item_of(rdata, "public_key", const_cast<const ::getdns_bindata*>(&public_key));
     GetDns::Data::set_item_of(anchor, "rdata", const_cast<const GetDns::Data::Dict&>(rdata).get_base_ptr());
     return anchor;
@@ -357,6 +357,28 @@ Data::List Data::List::get_root_trust_anchor(::time_t& _utc_date_of_anchor)
     return List(::getdns_root_trust_anchor(&_utc_date_of_anchor));
 }
 
+Data::Binary::Binary()
+    : binary_data_()
+{ }
+
+Data::Binary::Binary(const std::string& _binary_data)
+    : binary_data_(_binary_data)
+{ }
+
+Data::Binary::Binary(const void* _binary_data, ::uint32_t _data_length)
+    : binary_data_(reinterpret_cast<const char*>(_binary_data), _data_length)
+{ }
+
+const void* Data::Binary::get_binary_data()const
+{
+    return static_cast<const void*>(binary_data_.c_str());
+}
+
+::uint32_t Data::Binary::get_length()const
+{
+    return binary_data_.length();
+}
+
 namespace {
 
 std::string remove_the_base64_padding_characters(const std::string& _with_paddings)
@@ -381,7 +403,7 @@ std::string remove_the_base64_padding_characters(const std::string& _with_paddin
 
 }//namespace GetDns::{anonymous}
 
-std::string Data::base64_decode(const std::string& _base64_encoded_text)
+Data::Binary Data::base64_decode(const std::string& _base64_encoded_text)
 {
     namespace bai = boost::archive::iterators;
     typedef bai::transform_width<bai::binary_from_base64<const char *>, 8, 6> Base64Decode;
@@ -392,18 +414,20 @@ std::string Data::base64_decode(const std::string& _base64_encoded_text)
     std::copy(Base64Decode(without_paddings.data()),
               Base64Decode(without_paddings.data() + without_paddings.size()),
               std::ostream_iterator<char>(decoded_bin_data));
-    return decoded_bin_data.str();
+    return Binary(decoded_bin_data.str());
 }
 
-std::string Data::base64_encode(const std::string& _binary_data)
+std::string Data::base64_encode(const Data::Binary& _raw_data)
 {
     typedef boost::archive::iterators::base64_from_binary<
                 boost::archive::iterators::transform_width<const char*, 6, 8> > Base64Encode;
     std::ostringstream base64_encoded_text;
-    std::copy(Base64Encode(_binary_data.data()),
-              Base64Encode(_binary_data.data() + _binary_data.size()),
+    const char* const data_begin = reinterpret_cast<const char*>(_raw_data.get_binary_data());
+    const char* const data_end = data_begin + _raw_data.get_length();
+    std::copy(Base64Encode(data_begin),
+              Base64Encode(data_end),
               std::ostream_iterator<char>(base64_encoded_text));
-    switch (_binary_data.size() % 3)
+    switch (_raw_data.get_length() % 3)
     {
         case 0:
             break;
@@ -447,6 +471,7 @@ template Data::Is::Type Data::Is::of<Data::Dict>()const;
 template Data::Is::Type Data::Is::of<Data::List>()const;
 template Data::Is::Type Data::Is::of< ::uint32_t >()const;
 template Data::Is::Type Data::Is::of<std::string>()const;
+template Data::Is::Type Data::Is::of<Data::Binary>()const;
 template Data::Is::Type Data::Is::of<Data::Fqdn>()const;
 template Data::Is::Type Data::Is::of<boost::asio::ip::address>()const;
 template Data::Is::Type Data::Is::of<Data::NotSet>()const;
@@ -463,6 +488,7 @@ template const Data::List& Data::From::get_value_of<Data::List>()const;
 template const Data::Fqdn& Data::From::get_value_of<Data::Fqdn>()const;
 template const ::uint32_t& Data::From::get_value_of< ::uint32_t >()const;
 template const std::string& Data::From::get_value_of<std::string>()const;
+template const Data::Binary& Data::From::get_value_of<Data::Binary>()const;
 template const boost::asio::ip::address& Data::From::get_value_of<boost::asio::ip::address>()const;
 
 namespace {
@@ -691,6 +717,24 @@ struct GetItem<std::string, S, typename TypeTraits<typename S::Base*>::IndexedBy
 };
 
 template <class S>
+struct GetItem<Data::Binary, S, typename TypeTraits<typename S::Base*>::IndexedByType>
+{
+    typedef Data::Binary Result;
+    typedef S Source;
+    typedef typename TypeTraits<typename Source::Base*>::IndexedByType Index;
+    static Result from(const typename Source::SharedBasePtr& _parent, Index _key)
+    {
+        ::getdns_bindata* item = NULL;
+        const ::getdns_return_t result = get_what_from_by(&item, _parent->ptr, _key);
+        if (result != ::GETDNS_RETURN_GOOD)
+        {
+            throw Error(result);
+        }
+        return Data::Binary(reinterpret_cast<const char*>(item->data), item->size);
+    }
+};
+
+template <class S>
 struct GetItem<Data::Fqdn, S, typename TypeTraits<typename S::Base*>::IndexedByType>
 {
     typedef Data::Fqdn Result;
@@ -881,6 +925,9 @@ template Data::Value Data::get<boost::asio::ip::address, Data::Dict, std::string
 template Data::Value Data::get<std::string, Data::Dict, const char*>(const Data::Dict&, const char*);
 template Data::Value Data::get<std::string, Data::Dict, std::string>(const Data::Dict&, std::string);
 
+template Data::Value Data::get<Data::Binary, Data::Dict, const char*>(const Data::Dict&, const char*);
+template Data::Value Data::get<Data::Binary, Data::Dict, std::string>(const Data::Dict&, std::string);
+
 template Data::Value Data::get<Data::Fqdn, Data::Dict, const char*>(const Data::Dict&, const char*);
 template Data::Value Data::get<Data::Fqdn, Data::Dict, std::string>(const Data::Dict&, std::string);
 
@@ -890,6 +937,7 @@ template Data::Value Data::get<Data::List, Data::List, ::size_t>(const Data::Lis
 template Data::Value Data::get< ::uint32_t, Data::List, ::size_t >(const Data::List&, ::size_t);
 template Data::Value Data::get<boost::asio::ip::address, Data::List, ::size_t>(const Data::List&, ::size_t);
 template Data::Value Data::get<std::string, Data::List, ::size_t>(const Data::List&, ::size_t);
+template Data::Value Data::get<Data::Binary, Data::List, ::size_t>(const Data::List&, ::size_t);
 template Data::Value Data::get<Data::Fqdn, Data::List, ::size_t>(const Data::List&, ::size_t);
 
 

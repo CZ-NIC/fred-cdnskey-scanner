@@ -48,7 +48,7 @@ struct Cdnskey
     ::uint16_t flags;
     ::uint8_t protocol;
     ::uint8_t algorithm;
-    std::string public_key;
+    GetDns::Data::Binary public_key;
     friend std::ostream& operator<<(std::ostream& out, const Cdnskey& value)
     {
         out << ::uint32_t(value.flags)
@@ -233,12 +233,12 @@ private:
                     cdnskey.protocol = GetDns::Data::From(protocol_value).get_value_of< ::uint32_t >();
                 }
                 {
-                    const GetDns::Data::Value public_key_value = GetDns::Data::get<std::string>(rdata, "public_key");
-                    if (!GetDns::Data::Is(public_key_value).of<std::string>().type)
+                    const GetDns::Data::Value public_key_value = GetDns::Data::get<GetDns::Data::Binary>(rdata, "public_key");
+                    if (!GetDns::Data::Is(public_key_value).of<GetDns::Data::Binary>().type)
                     {
                         continue;
                     }
-                    cdnskey.public_key = GetDns::Data::From(public_key_value).get_value_of<std::string>();
+                    cdnskey.public_key = GetDns::Data::From(public_key_value).get_value_of<GetDns::Data::Binary>();
                 }
                 result_.cdnskeys.push_back(cdnskey);
             }
