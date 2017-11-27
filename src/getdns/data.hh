@@ -66,6 +66,17 @@ struct Data
     typedef boost::variant< boost::shared_ptr<HolderOfDictPtr>,
                             boost::shared_ptr<HolderOfListPtr>,
                             Empty > HolderOfDataPtr;
+    class Binary
+    {
+    public:
+        Binary();
+        explicit Binary(const std::string& _binary_data);
+        Binary(const void* _binary_data, ::uint32_t _data_length);
+        const void* get_binary_data()const;
+        ::uint32_t get_length()const;
+    private:
+        std::string binary_data_;
+    };
     struct LookUpResult
     {
         enum Enum
@@ -98,7 +109,7 @@ struct Data
                 ::uint16_t _flags,
                 ::uint8_t _protocol,
                 ::uint8_t _algorithm,
-                 const std::string& _public_key);
+                 const Binary& _public_key);
         friend std::ostream& operator<<(std::ostream& out, const Dict& data) { return out << data.get_pretty_string(); }
     private:
         explicit Dict(Base* _base);
@@ -151,6 +162,7 @@ struct Data
             List,
             ::uint32_t,
             std::string,
+            Binary,
             Fqdn,
             boost::asio::ip::address,
             NotSet,
@@ -161,7 +173,7 @@ struct Data
         ::uint16_t flags;
         ::uint8_t protocol;
         ::uint8_t algorithm;
-        std::string public_key;
+        Binary public_key;
     };
     class Is
     {
@@ -188,8 +200,8 @@ struct Data
     };
     template <class R, class S, class K>
     static Value get(const S& _src, K _index);
-    static std::string base64_decode(const std::string& _base64_encoded_text);
-    static std::string base64_encode(const std::string& _binary_data);
+    static Binary base64_decode(const std::string& _base64_encoded_text);
+    static std::string base64_encode(const Binary& _raw_data);
 };
 
 }//namespace GetDns
