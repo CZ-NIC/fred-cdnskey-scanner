@@ -452,11 +452,11 @@ struct ValueIsOf:boost::static_visitor<bool>
 };
 
 template <typename T>
-struct GetValueOf:boost::static_visitor<T>
+struct GetValueOf
 {
     const T& operator()(const T& _value)const { return _value; }
     template <typename X>
-    T operator()(X)const { throw std::runtime_error("unexpected type"); }
+    const T& operator()(X)const { throw std::runtime_error("unexpected type"); }
 };
 
 }//namespace GetDns::{anonymous}
