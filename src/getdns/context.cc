@@ -23,6 +23,7 @@
 
 #include <getdns/getdns_ext_libevent.h>
 
+#include <array>
 #include <vector>
 
 namespace GetDns
@@ -155,20 +156,22 @@ Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip
         if (address->is_v4())
         {
             Data::set_item_of(item, "address_type", "IPv4");
+            typedef boost::asio::ip::address_v4::bytes_type IpAddressData;
             const ::getdns_bindata address_data =
                     {
-                        boost::asio::ip::address_v4::bytes_type::static_size,
-                        address->to_v4().to_bytes().c_array()
+                        sizeof(IpAddressData::value_type[std::tuple_size<IpAddressData>::value]),
+                        address->to_v4().to_bytes().data()
                     };
             Data::set_item_of(item, "address_data", &address_data);
         }
         else if (address->is_v6())
         {
             Data::set_item_of(item, "address_type", "IPv6");
+            typedef boost::asio::ip::address_v6::bytes_type IpAddressData;
             const ::getdns_bindata address_data =
                     {
-                        boost::asio::ip::address_v6::bytes_type::static_size,
-                        address->to_v6().to_bytes().c_array()
+                        sizeof(IpAddressData::value_type[std::tuple_size<IpAddressData>::value]),
+                        address->to_v6().to_bytes().data()
                     };
             Data::set_item_of(item, "address_data", &address_data);
         }

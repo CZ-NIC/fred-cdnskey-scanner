@@ -406,7 +406,7 @@ std::string remove_the_base64_padding_characters(const std::string& _with_paddin
 Data::Binary Data::base64_decode(const std::string& _base64_encoded_text)
 {
     namespace bai = boost::archive::iterators;
-    typedef bai::transform_width<bai::binary_from_base64<const char *>, 8, 6> Base64Decode;
+    typedef bai::transform_width<bai::binary_from_base64<const char*>, 8, 6> Base64Decode;
 
     const std::string without_paddings = remove_the_base64_padding_characters(_base64_encoded_text);
     std::ostringstream decoded_bin_data;
@@ -420,7 +420,7 @@ Data::Binary Data::base64_decode(const std::string& _base64_encoded_text)
 std::string Data::base64_encode(const Data::Binary& _raw_data)
 {
     typedef boost::archive::iterators::base64_from_binary<
-                boost::archive::iterators::transform_width<const char*, 6, 8> > Base64Encode;
+                boost::archive::iterators::transform_width<const char*, 6, 8>> Base64Encode;
     std::ostringstream base64_encoded_text;
     const char* const data_begin = reinterpret_cast<const char*>(_raw_data.get_binary_data());
     const char* const data_end = data_begin + _raw_data.get_length();
@@ -446,17 +446,17 @@ namespace {
 template <typename T>
 struct ValueIsOf:boost::static_visitor<bool>
 {
-    bool operator()(const T&)const { return true; }
+    bool operator()(T)const { return true; }
     template <typename X>
-    bool operator()(const X&)const { return false; }
+    bool operator()(X)const { return false; }
 };
 
 template <typename T>
-struct GetValueOf:boost::static_visitor<const T&>
+struct GetValueOf:boost::static_visitor<T>
 {
     const T& operator()(const T& _value)const { return _value; }
     template <typename X>
-    const T& operator()(const X&)const { throw std::runtime_error("unexpected type"); }
+    T operator()(X)const { throw std::runtime_error("unexpected type"); }
 };
 
 }//namespace GetDns::{anonymous}
@@ -469,7 +469,7 @@ Data::Is::Type Data::Is::of()const
 
 template Data::Is::Type Data::Is::of<Data::Dict>()const;
 template Data::Is::Type Data::Is::of<Data::List>()const;
-template Data::Is::Type Data::Is::of< ::uint32_t >()const;
+template Data::Is::Type Data::Is::of<::uint32_t>()const;
 template Data::Is::Type Data::Is::of<std::string>()const;
 template Data::Is::Type Data::Is::of<Data::Binary>()const;
 template Data::Is::Type Data::Is::of<Data::Fqdn>()const;
@@ -486,7 +486,7 @@ const T& Data::From::get_value_of()const
 template const Data::Dict& Data::From::get_value_of<Data::Dict>()const;
 template const Data::List& Data::From::get_value_of<Data::List>()const;
 template const Data::Fqdn& Data::From::get_value_of<Data::Fqdn>()const;
-template const ::uint32_t& Data::From::get_value_of< ::uint32_t >()const;
+template const ::uint32_t& Data::From::get_value_of<::uint32_t>()const;
 template const std::string& Data::From::get_value_of<std::string>()const;
 template const Data::Binary& Data::From::get_value_of<Data::Binary>()const;
 template const boost::asio::ip::address& Data::From::get_value_of<boost::asio::ip::address>()const;
@@ -496,13 +496,13 @@ namespace {
 template <class T> struct TypeTraits { };
 
 template <>
-struct TypeTraits< ::getdns_dict* >
+struct TypeTraits<::getdns_dict*>
 {
     typedef const char* IndexedByType;
 };
 
 template <>
-struct TypeTraits< ::getdns_list* >
+struct TypeTraits<::getdns_list*>
 {
     typedef ::size_t IndexedByType;
 };
@@ -511,7 +511,7 @@ template <class W, class F, class B>
 ::getdns_return_t get_what_from_by(W* what, const F* from, B by);
 
 template <>
-::getdns_return_t get_what_from_by< ::getdns_dict*, ::getdns_dict, const char* >(
+::getdns_return_t get_what_from_by<::getdns_dict*, ::getdns_dict, const char*>(
         ::getdns_dict** what,
          const ::getdns_dict* from,
          const char* by)
@@ -520,7 +520,7 @@ template <>
 }
 
 template <>
-::getdns_return_t get_what_from_by< ::getdns_list*, ::getdns_dict, const char* >(
+::getdns_return_t get_what_from_by<::getdns_list*, ::getdns_dict, const char*>(
         ::getdns_list** what,
          const ::getdns_dict* from,
          const char* by)
@@ -529,7 +529,7 @@ template <>
 }
 
 template <>
-::getdns_return_t get_what_from_by< ::getdns_bindata*, ::getdns_dict, const char* >(
+::getdns_return_t get_what_from_by<::getdns_bindata*, ::getdns_dict, const char*>(
         ::getdns_bindata** what,
          const ::getdns_dict* from,
          const char* by)
@@ -538,7 +538,7 @@ template <>
 }
 
 template <>
-::getdns_return_t get_what_from_by< ::uint32_t, ::getdns_dict, const char* >(
+::getdns_return_t get_what_from_by<::uint32_t, ::getdns_dict, const char*>(
         ::uint32_t* what,
          const ::getdns_dict* from,
          const char* by)
@@ -547,7 +547,7 @@ template <>
 }
 
 template <>
-::getdns_return_t get_what_from_by< ::getdns_dict*, ::getdns_list, ::size_t >(
+::getdns_return_t get_what_from_by<::getdns_dict*, ::getdns_list, ::size_t>(
         ::getdns_dict** what,
          const ::getdns_list* from,
          ::size_t by)
@@ -556,7 +556,7 @@ template <>
 }
 
 template <>
-::getdns_return_t get_what_from_by< ::getdns_list*, ::getdns_list, ::size_t >(
+::getdns_return_t get_what_from_by<::getdns_list*, ::getdns_list, ::size_t>(
         ::getdns_list** what,
          const ::getdns_list* from,
          ::size_t by)
@@ -565,7 +565,7 @@ template <>
 }
 
 template <>
-::getdns_return_t get_what_from_by< ::getdns_bindata*, ::getdns_list, ::size_t >(
+::getdns_return_t get_what_from_by<::getdns_bindata*, ::getdns_list, ::size_t>(
         ::getdns_bindata** what,
          const ::getdns_list* from,
          ::size_t by)
@@ -574,7 +574,7 @@ template <>
 }
 
 template <>
-::getdns_return_t get_what_from_by< ::uint32_t, ::getdns_list, ::size_t >(
+::getdns_return_t get_what_from_by<::uint32_t, ::getdns_list, ::size_t>(
         ::uint32_t* what,
          const ::getdns_list* from,
          ::size_t by)
@@ -601,7 +601,7 @@ struct ConvertibleInto<Data::List>
 };
 
 template <>
-struct ConvertibleInto< ::uint32_t >
+struct ConvertibleInto<::uint32_t>
 {
     static const Data::Type::Enum from = Data::Type::integer;
 };
