@@ -13,7 +13,6 @@ AM_CXXFLAGS = \
 		$(GETDNS_CXXFLAGS) \
 		$(GETDNSEXTRA_CXXFLAGS) \
 		$(LIBEVENT_CXXFLAGS) \
-		-std=c++03 \
 		-Wall \
 		-Wextra \
 		-ggdb \

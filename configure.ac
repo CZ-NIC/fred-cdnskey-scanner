@@ -9,6 +9,10 @@ AC_LANG(C++)
 : ${CFLAGS=""}   AC_PROG_CC
 : ${CXXFLAGS=""} AC_PROG_CXX
 
+AX_CHECK_COMPILE_FLAG([-std=c++14],
+                      [CXXFLAGS="$CXXFLAGS -std=c++14"],
+                      [AC_MSG_ERROR([This project requires -std=c++14 support])])
+
 AX_BOOST_BASE
 AX_BOOST_SYSTEM
 
