@@ -23,16 +23,17 @@
 
 #include <getdns/getdns.h>
 
-namespace GetDns
-{
+#include <string>
+
+namespace GetDns {
 
 class Error:public Exception
 {
 public:
-    explicit Error(getdns_return_t _error_code);
+    Error(::getdns_return_t _error_code, const char* _file, int _line);
     const char* what()const throw();
 private:
-    const getdns_return_t error_code_;
+    const std::string msg_;
 };
 
 }//namespace GetDns

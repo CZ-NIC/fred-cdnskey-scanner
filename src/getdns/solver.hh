@@ -28,16 +28,15 @@
 #include <getdns/getdns.h>
 
 #include <map>
+#include <memory>
 #include <list>
 #include <string>
 
 #include <boost/optional.hpp>
-#include <boost/shared_ptr.hpp>
 
-namespace GetDns
-{
+namespace GetDns {
 
-typedef boost::shared_ptr<Request> RequestPtr;
+typedef std::shared_ptr<Request> RequestPtr;
 
 class Solver
 {
@@ -60,7 +59,7 @@ public:
 private:
     void clean_finished_requests();
     Event::Base event_base_;
-    typedef std::map< ::getdns_transaction_t, RequestPtr > RequestId;
+    typedef std::map<::getdns_transaction_t, RequestPtr> RequestId;
     RequestId active_requests_;
     ListOfRequestPtr finished_requests_;
     static void getdns_callback_function(

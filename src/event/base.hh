@@ -21,6 +21,7 @@
 
 #include <event2/event.h>
 
+#include <cstdint>
 #include <exception>
 
 namespace Event
@@ -59,7 +60,7 @@ class Timeout:protected OnTimeout
 public:
     Timeout(Base& _base);
     ~Timeout();
-    Timeout& set(::uint64_t _timeout_usec);
+    Timeout& set(std::uint64_t _timeout_usec);
     Timeout& remove();
 private:
     void on_event(short _events);

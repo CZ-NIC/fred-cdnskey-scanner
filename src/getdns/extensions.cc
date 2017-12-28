@@ -36,27 +36,27 @@ Data::Dict Extensions::into_dictionary()const
     Data::Dict retval;
     if (dnssec_return_status)
     {
-        Data::set_item_of(retval, "dnssec_return_status", static_cast< ::uint32_t >(GETDNS_EXTENSION_TRUE));
+        Data::set_item_of(retval, "dnssec_return_status", static_cast<std::uint32_t>(GETDNS_EXTENSION_TRUE));
     }
     if (dnssec_return_only_secure)
     {
-        Data::set_item_of(retval, "dnssec_return_only_secure", static_cast< ::uint32_t >(GETDNS_EXTENSION_TRUE));
+        Data::set_item_of(retval, "dnssec_return_only_secure", static_cast<std::uint32_t>(GETDNS_EXTENSION_TRUE));
     }
     if (dnssec_return_validation_chain)
     {
-        Data::set_item_of(retval, "dnssec_return_validation_chain", static_cast< ::uint32_t >(GETDNS_EXTENSION_TRUE));
+        Data::set_item_of(retval, "dnssec_return_validation_chain", static_cast<std::uint32_t>(GETDNS_EXTENSION_TRUE));
     }
     if (return_both_v4_and_v6)
     {
-        Data::set_item_of(retval, "return_both_v4_and_v6", static_cast< ::uint32_t >(GETDNS_EXTENSION_TRUE));
+        Data::set_item_of(retval, "return_both_v4_and_v6", static_cast<std::uint32_t>(GETDNS_EXTENSION_TRUE));
     }
     if (add_warning_for_bad_dns)
     {
-        Data::set_item_of(retval, "add_warning_for_bad_dns", static_cast< ::uint32_t >(GETDNS_EXTENSION_TRUE));
+        Data::set_item_of(retval, "add_warning_for_bad_dns", static_cast<std::uint32_t>(GETDNS_EXTENSION_TRUE));
     }
     if (return_call_reporting)
     {
-        Data::set_item_of(retval, "return_call_reporting", static_cast< ::uint32_t >(GETDNS_EXTENSION_TRUE));
+        Data::set_item_of(retval, "return_call_reporting", static_cast<std::uint32_t>(GETDNS_EXTENSION_TRUE));
     }
     return retval;
 }

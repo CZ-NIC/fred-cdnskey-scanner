@@ -142,9 +142,9 @@ int get_descriptor_number_of(ImWriter::Stream stream)
 {
     switch (stream)
     {
-        case ImWriter::stdout:
+        case ImWriter::Stream::stdout:
             return STDOUT_FILENO;
-        case ImWriter::stderr:
+        case ImWriter::Stream::stderr:
             return STDERR_FILENO;
     }
     throw std::logic_error("unexpected enum value");

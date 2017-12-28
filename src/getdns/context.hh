@@ -60,7 +60,7 @@ public:
     Context& set_dns_transport_list(const TransportList& _transport_list);
     Context& set_upstream_recursive_servers(const std::list<boost::asio::ip::address>& _servers);
     Context& set_follow_redirects(bool _yes);
-    Context& set_timeout(::uint64_t _value_ms);
+    Context& set_timeout(std::uint64_t _value_ms);
     Context& set_dnssec_trust_anchors(const std::list<Data::TrustAnchor>& _anchors);
     ::getdns_context* release_context();
 private:

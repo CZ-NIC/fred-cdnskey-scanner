@@ -26,8 +26,8 @@
 #include <string>
 #include <set>
 #include <iosfwd>
+#include <memory>
 
-#include <boost/shared_ptr.hpp>
 #include <boost/variant/variant.hpp>
 #include <boost/asio/ip/address.hpp>
 
@@ -40,81 +40,73 @@ struct Data
 {
     class Dict;
     class List;
-    struct Type
+    enum class Type
     {
-        enum Enum
-        {
-            dictionary,
-            array,
-            binary,
-            integer
-        };
+        dictionary,
+        array,
+        binary,
+        integer
     };
     template <class T>
     struct HolderOf
     {
-        explicit HolderOf(T* src, void(*destroy_fnc)(T*) = NULL)
+        explicit HolderOf(T* src, void(*destroy_fnc)(T*) = nullptr)
             : ptr(src),
               destroy_routine(destroy_fnc) { }
-        ~HolderOf() { if (destroy_routine != NULL) { destroy_routine(ptr); } }
+        ~HolderOf() { if (destroy_routine != nullptr) { destroy_routine(ptr); } }
         T* const ptr;
         void(*const destroy_routine)(T*);
     };
-    typedef HolderOf< ::getdns_dict > HolderOfDictPtr;
-    typedef HolderOf< ::getdns_list > HolderOfListPtr;
     struct Empty { };
-    typedef boost::variant< boost::shared_ptr<HolderOfDictPtr>,
-                            boost::shared_ptr<HolderOfListPtr>,
-                            Empty > HolderOfDataPtr;
+    typedef boost::variant<std::shared_ptr<::getdns_dict*>,
+                           std::shared_ptr<::getdns_list*>,
+                           Empty> HolderOfDataPtr;
     class Binary
     {
     public:
         Binary();
         explicit Binary(const std::string& _binary_data);
-        Binary(const void* _binary_data, ::uint32_t _data_length);
+        Binary(const void* _binary_data, std::uint32_t _data_length);
         const void* get_binary_data()const;
-        ::uint32_t get_length()const;
+        std::uint32_t get_length()const;
     private:
         std::string binary_data_;
     };
-    struct LookUpResult
+    enum class LookUpResult
     {
-        enum Enum
-        {
-            success,
-            index_out_of_range,
-            not_found,
-            different_type
-        };
+        success,
+        index_out_of_range,
+        not_found,
+        different_type
     };
     class Dict
     {
     public:
         typedef ::getdns_dict Base;
-        typedef boost::shared_ptr<HolderOfDictPtr> SharedBasePtr;
+        typedef std::shared_ptr<::getdns_dict*> SharedBasePtr;
         Dict();
         Dict(const Dict& _src);
         ~Dict();
         Dict& operator=(const Dict& _src);
-        Type::Enum get_data_type_of_item(const char* _key)const;
-        Type::Enum get_data_type_of_item(const std::string& _key)const;
+        Type get_data_type_of_item(const char* _key)const;
+        Type get_data_type_of_item(const std::string& _key)const;
         typedef std::set<std::string> Keys;
         Keys get_keys()const;
         std::string get_pretty_string()const;
         Base* get_base_ptr();
         const Base* get_base_ptr()const;
-        LookUpResult::Enum look_up(const char* _key, Type::Enum _type)const;
+        LookUpResult look_up(const char* _key, Type _type)const;
         static Dict get_trust_anchor(
                 const std::string& _zone,
-                ::uint16_t _flags,
-                ::uint8_t _protocol,
-                ::uint8_t _algorithm,
+                std::uint16_t _flags,
+                std::uint8_t _protocol,
+                std::uint8_t _algorithm,
                  const Binary& _public_key);
         friend std::ostream& operator<<(std::ostream& out, const Dict& data) { return out << data.get_pretty_string(); }
     private:
         explicit Dict(Base* _base);
-        Dict(Base* _base, const boost::shared_ptr<HolderOfDictPtr>& _parent);
-        Dict(Base* _base, const boost::shared_ptr<HolderOfListPtr>& _parent);
+        Dict(Base* _base, const std::shared_ptr<::getdns_dict*>& _parent);
+        Dict(Base* _base, const std::shared_ptr<::getdns_list*>& _parent);
         SharedBasePtr base_ptr_;
         HolderOfDataPtr parent_;
         friend class Data;
@@ -127,21 +119,21 @@ struct Data
     {
     public:
         typedef ::getdns_list Base;
-        typedef boost::shared_ptr<HolderOfListPtr> SharedBasePtr;
+        typedef std::shared_ptr<::getdns_list*> SharedBasePtr;
         List();
         List(const List& _src);
         ~List();
         List& operator=(const List& _src);
         std::size_t get_number_of_items()const;
-        Type::Enum get_data_type_of_item(::size_t _index)const;
-        LookUpResult::Enum look_up(::size_t _index, Type::Enum _type)const;
+        Type get_data_type_of_item(::size_t _index)const;
+        LookUpResult look_up(::size_t _index, Type _type)const;
         const Base* get_base_ptr()const;
         Base* get_base_ptr();
         static List get_root_trust_anchor(::time_t& _utc_date_of_anchor);
     private:
         explicit List(Base* _base);
-        List(Base* _base, const boost::shared_ptr<HolderOfDictPtr>& _parent);
-        List(Base* _base, const boost::shared_ptr<HolderOfListPtr>& _parent);
+        List(Base* _base, const std::shared_ptr<::getdns_dict*>& _parent);
+        List(Base* _base, const std::shared_ptr<::getdns_list*>& _parent);
         SharedBasePtr base_ptr_;
         HolderOfDataPtr parent_;
         friend class Data;
@@ -160,7 +152,7 @@ struct Data
     typedef boost::variant<
             Dict,
             List,
-            ::uint32_t,
+            std::uint32_t,
             std::string,
             Binary,
             Fqdn,
@@ -170,9 +162,9 @@ struct Data
     struct TrustAnchor
     {
         std::string zone;
-        ::uint16_t flags;
-        ::uint8_t protocol;
-        ::uint8_t algorithm;
+        std::uint16_t flags;
+        std::uint8_t protocol;
+        std::uint8_t algorithm;
         Binary public_key;
     };
     class Is

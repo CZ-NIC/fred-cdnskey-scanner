@@ -42,15 +42,15 @@ public:
           timeout_sec_(_timeout_sec),
           transport_list_(_transport_list),
           resolvers_(_resolvers),
-          context_ptr_(NULL),
+          context_ptr_(nullptr),
           status_(Status::none)
     { }
     ~Query()
     {
-        if (context_ptr_ != NULL)
+        if (context_ptr_ != nullptr)
         {
             delete context_ptr_;
-            context_ptr_ = NULL;
+            context_ptr_ = nullptr;
         }
     }
     struct Status
@@ -89,7 +89,7 @@ public:
 private:
     GetDns::Context& get_context()
     {
-        if (context_ptr_ != NULL)
+        if (context_ptr_ != nullptr)
         {
             return *context_ptr_;
         }
@@ -101,10 +101,10 @@ private:
     }
     void join(Event::Base& _event_base)
     {
-        if (context_ptr_ != NULL)
+        if (context_ptr_ != nullptr)
         {
             delete context_ptr_;
-            context_ptr_ = NULL;
+            context_ptr_ = nullptr;
         }
         context_ptr_ = new GetDns::Context(_event_base, GetDns::Context::InitialSettings::from_os);
         if (transport_list_)
@@ -196,7 +196,7 @@ public:
             {
                 const GetDns::Request* const request_ptr = request_ptr_itr->get();
                 const Query* const query_ptr = dynamic_cast<const Query*>(request_ptr);
-                if (query_ptr != NULL)
+                if (query_ptr != nullptr)
                 {
                     const std::string nameserver = query_ptr->get_hostname();
                     switch (query_ptr->get_status())
@@ -267,14 +267,14 @@ private:
     {
         const struct ::timespec now = TimeUnit::get_clock_monotonic();
         const TimeUnit::Nanoseconds remaining_time_nsec = time_end_ - now;
-        const ::uint64_t min_timeout_usec = 4000;//smaller value exhausts file descriptors :-(
+        const std::uint64_t min_timeout_usec = 4000;//smaller value exhausts file descriptors :-(
         if (remaining_time_nsec.value <= 0)
         {
             this->Event::Timeout::set(min_timeout_usec);
         }
         else
         {
-            const ::uint64_t the_one_query_time_usec = remaining_time_nsec.value / (1000 * remaining_queries_);
+            const std::uint64_t the_one_query_time_usec = remaining_time_nsec.value / (1000 * remaining_queries_);
             this->Event::Timeout::set(the_one_query_time_usec < min_timeout_usec
                                       ? min_timeout_usec
                                       : the_one_query_time_usec);
@@ -412,11 +412,11 @@ private:
     }
     Answer& remove()
     {
-        if (event_ptr_ != NULL)
+        if (event_ptr_ != nullptr)
         {
             ::event_del(event_ptr_);
             ::event_free(event_ptr_);
-            event_ptr_ = NULL;
+            event_ptr_ = nullptr;
         }
         return *this;
     }
@@ -485,7 +485,7 @@ private:
     static void callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr)
     {
         Answer* const event_ptr = static_cast<Answer*>(_user_data_ptr);
-        if ((event_ptr != NULL) && (event_ptr->source_.get_descriptor() == _fd))
+        if ((event_ptr != nullptr) && (event_ptr->source_.get_descriptor() == _fd))
         {
             try
             {
@@ -535,7 +535,7 @@ public:
     { }
     int operator()()const
     {
-        Util::ImWriter to_parent(pipe_to_parent_, Util::ImWriter::stdout);
+        Util::ImWriter to_parent(pipe_to_parent_, Util::ImWriter::Stream::stdout);
         GetDns::Solver solver;
         if (resolved_.empty() && unresolved_.empty())
         {

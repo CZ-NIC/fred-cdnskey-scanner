@@ -19,22 +19,22 @@
 #ifndef TIME_UNIT_HH_AA862C0A2A13AEFBE6D015A289BED606//date "+%s"|md5sum|tr "[a-f]" "[A-F]"
 #define TIME_UNIT_HH_AA862C0A2A13AEFBE6D015A289BED606
 
-#include <stdint.h>
+#include <cstdint>
 #include <time.h>
 
 namespace TimeUnit {
 
 struct Seconds
 {
-    explicit Seconds(::int64_t sec):value(sec) { }
-    ::int64_t value;
+    explicit Seconds(std::int64_t sec):value(sec) { }
+    std::int64_t value;
 };
 
 struct Nanoseconds
 {
-    explicit Nanoseconds(::int64_t nsec):value(nsec) { }
+    explicit Nanoseconds(std::int64_t nsec):value(nsec) { }
     explicit Nanoseconds(const Seconds& sec);
-    ::int64_t value;
+    std::int64_t value;
 };
 
 struct ::timespec get_clock_monotonic();

@@ -33,7 +33,7 @@ namespace Event
 Base::Base()
     : base_(::event_base_new())
 {
-    if (base_ == NULL)
+    if (base_ == nullptr)
     {
         struct BaseException:Exception
         {
@@ -45,10 +45,10 @@ Base::Base()
 
 Base::~Base()
 {
-    if (base_ != NULL)
+    if (base_ != nullptr)
     {
         ::event_base_free(base_);
-        base_ = NULL;
+        base_ = nullptr;
     }
 }
 
@@ -138,7 +138,7 @@ Timeout::Timeout(Base& _base)
 
 Timeout::~Timeout()
 {
-    if (event_ptr_ != NULL)
+    if (event_ptr_ != nullptr)
     {
         ::event_del(event_ptr_);
         ::event_free(event_ptr_);
@@ -150,7 +150,7 @@ Timeout::~Timeout()
     }
 }
 
-Timeout& Timeout::set(::uint64_t _timeout_usec)
+Timeout& Timeout::set(std::uint64_t _timeout_usec)
 {
     const int success = 0;
     struct ::timeval timeout;
@@ -176,11 +176,11 @@ Timeout& Timeout::set(::uint64_t _timeout_usec)
 
 Timeout& Timeout::remove()
 {
-    if (event_ptr_ != NULL)
+    if (event_ptr_ != nullptr)
     {
         ::event_del(event_ptr_);
         ::event_free(event_ptr_);
-        event_ptr_ = NULL;
+        event_ptr_ = nullptr;
     }
     const int invalid_descriptor = -1;
     if (fd_ != invalid_descriptor)
@@ -202,7 +202,7 @@ void Timeout::on_event(short _events)
 void Timeout::callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr)
 {
     Timeout* const event_ptr = static_cast<Timeout*>(_user_data_ptr);
-    if ((event_ptr != NULL) && (event_ptr->fd_ == _fd))
+    if ((event_ptr != nullptr) && (event_ptr->fd_ == _fd))
     {
         try
         {

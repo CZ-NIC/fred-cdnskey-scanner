@@ -21,8 +21,6 @@
 
 #include <cstddef>
 
-#include <boost/noncopyable.hpp>
-
 namespace Util {
 
 //public read end of pipe interface, hides write end of pipe
@@ -44,7 +42,7 @@ private:
     friend class ImWriter;
 };
 
-class ImReader:private boost::noncopyable
+class ImReader
 {
 public:
     ImReader(Pipe& _pipe);
@@ -52,13 +50,15 @@ public:
     void set_nonblocking()const;
     int get_descriptor()const;
 private:
+    ImReader(const ImReader&) = delete;
+    ImReader& operator=(const ImReader&) = delete;
     Pipe& pipe_;
 };
 
-class ImWriter:private boost::noncopyable
+class ImWriter
 {
 public:
-    enum Stream
+    enum class Stream
     {
         stdout,
         stderr
@@ -66,6 +66,8 @@ public:
     ImWriter(Pipe& _pipe, Stream _into);
     ~ImWriter() { }
 private:
+    ImWriter(const ImWriter&) = delete;
+    ImWriter& operator=(const ImWriter&) = delete;
     Pipe& pipe_;
 };
 

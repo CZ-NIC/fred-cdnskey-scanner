@@ -5,7 +5,7 @@ AM_CPPFLAGS = \
 		$(GETDNSEXTRA_CPPFLAGS) \
 		$(LIBEVENT_CPPFLAGS) \
 		$(BOOST_CPPFLAGS) \
-		-I ${srcdir}
+		-I${srcdir}
 
 AM_LDFLAGS = $(BOOST_LDFLAGS)
 
@@ -13,7 +13,8 @@ AM_CXXFLAGS = \
 		$(GETDNS_CXXFLAGS) \
 		$(GETDNSEXTRA_CXXFLAGS) \
 		$(LIBEVENT_CXXFLAGS) \
-		-std=c++03 \
+		-fdiagnostics-color=always \
+		-W \
 		-Wall \
 		-Wextra \
 		-ggdb \

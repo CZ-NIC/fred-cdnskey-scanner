@@ -105,7 +105,7 @@ extern const char cmdline_help_text[];
 
 int main(int argc, char* argv[])
 {
-    if ((argc <= 0) || (argv[0] == NULL))
+    if ((argc <= 0) || (argv[0] == nullptr))
     {
         std::cerr << "main() arguments are crazy" << std::endl;
         return EXIT_SUCCESS;
@@ -117,7 +117,7 @@ int main(int argc, char* argv[])
     std::string runtime_opt;
     char** const arg_end = argv + argc;
     char** arg_ptr = argv + 1;
-    while ((arg_ptr != arg_end) && (*arg_ptr != NULL))
+    while ((arg_ptr != arg_end) && (*arg_ptr != nullptr))
     {
         const int are_the_same = 0;
         if (std::strcmp(*arg_ptr, "--hostname_resolvers") == are_the_same)
@@ -128,7 +128,7 @@ int main(int argc, char* argv[])
                 return EXIT_FAILURE;
             }
             ++arg_ptr;
-            if (*arg_ptr == NULL)
+            if (*arg_ptr == nullptr)
             {
                 std::cerr << "no argument for hostname_resolvers option" << std::endl;
                 return EXIT_FAILURE;
@@ -148,7 +148,7 @@ int main(int argc, char* argv[])
                 return EXIT_FAILURE;
             }
             ++arg_ptr;
-            if (*arg_ptr == NULL)
+            if (*arg_ptr == nullptr)
             {
                 std::cerr << "no argument for cdnskey_resolvers option" << std::endl;
                 return EXIT_FAILURE;
@@ -168,7 +168,7 @@ int main(int argc, char* argv[])
                 return EXIT_FAILURE;
             }
             ++arg_ptr;
-            if (*arg_ptr == NULL)
+            if (*arg_ptr == nullptr)
             {
                 std::cerr << "no argument for dnssec_trust_anchors option" << std::endl;
                 return EXIT_FAILURE;
@@ -188,7 +188,7 @@ int main(int argc, char* argv[])
                 return EXIT_FAILURE;
             }
             ++arg_ptr;
-            if (*arg_ptr == NULL)
+            if (*arg_ptr == nullptr)
             {
                 std::cerr << "no argument for timeout option" << std::endl;
                 return EXIT_FAILURE;
@@ -233,7 +233,7 @@ int main(int argc, char* argv[])
     }
     try
     {
-        const TimeUnit::Seconds runtime(boost::lexical_cast< ::int64_t >(runtime_opt));
+        const TimeUnit::Seconds runtime(boost::lexical_cast<std::int64_t>(runtime_opt));
         if (runtime.value <= 0)
         {
             std::cerr << "lack of time" << std::endl;
@@ -277,7 +277,7 @@ int main(int argc, char* argv[])
         const std::list<GetDns::Data::TrustAnchor> anchors = split(dnssec_trust_anchors_opt, ",", append_trust_anchor);
         const TimeUnit::Seconds timeout_default(10);
         const TimeUnit::Seconds query_timeout = timeout_opt.empty() ? timeout_default
-                                                          : TimeUnit::Seconds(boost::lexical_cast< ::uint64_t >(timeout_opt));
+                                                          : TimeUnit::Seconds(boost::lexical_cast<std::uint64_t>(timeout_opt));
         const DomainsToScan domains_to_scan(std::cin);
         if ((domains_to_scan.get_number_of_nameservers() <= 0) &&
             (domains_to_scan.get_number_of_secure_domains() <= 0))

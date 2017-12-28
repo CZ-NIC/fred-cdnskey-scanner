@@ -27,7 +27,7 @@
 #include "src/util/pipe.hh"
 #include "src/util/fork.hh"
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <cstddef>
 
@@ -45,15 +45,15 @@ const int max_number_of_unresolved_queries = 200;
 
 struct Cdnskey
 {
-    ::uint16_t flags;
-    ::uint8_t protocol;
-    ::uint8_t algorithm;
+    std::uint16_t flags;
+    std::uint8_t protocol;
+    std::uint8_t algorithm;
     GetDns::Data::Binary public_key;
     friend std::ostream& operator<<(std::ostream& out, const Cdnskey& value)
     {
-        out << ::uint32_t(value.flags)
-            << " " << ::uint32_t(value.protocol)
-            << " " << ::uint32_t(value.algorithm)
+        out << std::uint32_t(value.flags)
+            << " " << std::uint32_t(value.protocol)
+            << " " << std::uint32_t(value.algorithm)
             << " " << GetDns::Data::base64_encode(value.public_key);
         return out;
     }
@@ -74,15 +74,15 @@ public:
           transport_list_(_transport_list),
           resolvers_(_resolvers),
           trust_anchors_(_trust_anchors),
-          context_ptr_(NULL),
+          context_ptr_(nullptr),
           status_(Status::none)
     { }
     ~Query()
     {
-        if (context_ptr_ != NULL)
+        if (context_ptr_ != nullptr)
         {
             delete context_ptr_;
-            context_ptr_ = NULL;
+            context_ptr_ = nullptr;
         }
     }
     struct Status
@@ -125,7 +125,7 @@ public:
 private:
     GetDns::Context& get_context()
     {
-        if (context_ptr_ != NULL)
+        if (context_ptr_ != nullptr)
         {
             return *context_ptr_;
         }
@@ -137,10 +137,10 @@ private:
     }
     void join(Event::Base& _event_base)
     {
-        if (context_ptr_ != NULL)
+        if (context_ptr_ != nullptr)
         {
             delete context_ptr_;
-            context_ptr_ = NULL;
+            context_ptr_ = nullptr;
         }
         context_ptr_ = new GetDns::Context(_event_base, GetDns::Context::InitialSettings::from_os);
         if (!resolvers_.empty())
@@ -148,7 +148,7 @@ private:
             context_ptr_->set_upstream_recursive_servers(resolvers_);
         }
         context_ptr_->set_timeout(timeout_sec_.value * 1000);
-        if (transport_list_)
+        if (transport_list_ != boost::none)
         {
             context_ptr_->set_dns_transport_list(*transport_list_);
         }
@@ -162,12 +162,12 @@ private:
     {
         status_ = Status::untrustworthy_answer;
         result_.cdnskeys.clear();
-        const GetDns::Data::Value answer_status = GetDns::Data::get< ::uint32_t >(_answer, "status");
-        if (!GetDns::Data::Is(answer_status).of< ::uint32_t >().type)
+        const GetDns::Data::Value answer_status = GetDns::Data::get<std::uint32_t>(_answer, "status");
+        if (!GetDns::Data::Is(answer_status).of<std::uint32_t>().type)
         {
             return;
         }
-        const ::uint32_t answer_status_value = GetDns::Data::From(answer_status).get_value_of< ::uint32_t >();
+        const std::uint32_t answer_status_value = GetDns::Data::From(answer_status).get_value_of<std::uint32_t>();
         if (answer_status_value != GETDNS_RESPSTATUS_GOOD)
         {
             return;
@@ -209,28 +209,28 @@ private:
 
                 Cdnskey cdnskey;
                 {
-                    const GetDns::Data::Value algorithm_value = GetDns::Data::get< ::uint32_t >(rdata, "algorithm");
-                    if (!GetDns::Data::Is(algorithm_value).of< ::uint32_t >().type)
+                    const GetDns::Data::Value algorithm_value = GetDns::Data::get<std::uint32_t>(rdata, "algorithm");
+                    if (!GetDns::Data::Is(algorithm_value).of<std::uint32_t>().type)
                     {
                         continue;
                     }
-                    cdnskey.algorithm = GetDns::Data::From(algorithm_value).get_value_of< ::uint32_t >();
+                    cdnskey.algorithm = GetDns::Data::From(algorithm_value).get_value_of<std::uint32_t>();
                 }
                 {
-                    const GetDns::Data::Value flags_value = GetDns::Data::get< ::uint32_t >(rdata, "flags");
-                    if (!GetDns::Data::Is(flags_value).of< ::uint32_t >().type)
+                    const GetDns::Data::Value flags_value = GetDns::Data::get<std::uint32_t>(rdata, "flags");
+                    if (!GetDns::Data::Is(flags_value).of<std::uint32_t>().type)
                     {
                         continue;
                     }
-                    cdnskey.flags = GetDns::Data::From(flags_value).get_value_of< ::uint32_t >();
+                    cdnskey.flags = GetDns::Data::From(flags_value).get_value_of<std::uint32_t>();
                 }
                 {
-                    const GetDns::Data::Value protocol_value = GetDns::Data::get< ::uint32_t >(rdata, "protocol");
-                    if (!GetDns::Data::Is(protocol_value).of< ::uint32_t >().type)
+                    const GetDns::Data::Value protocol_value = GetDns::Data::get<std::uint32_t>(rdata, "protocol");
+                    if (!GetDns::Data::Is(protocol_value).of<std::uint32_t>().type)
                     {
                         continue;
                     }
-                    cdnskey.protocol = GetDns::Data::From(protocol_value).get_value_of< ::uint32_t >();
+                    cdnskey.protocol = GetDns::Data::From(protocol_value).get_value_of<std::uint32_t>();
                 }
                 {
                     const GetDns::Data::Value public_key_value = GetDns::Data::get<GetDns::Data::Binary>(rdata, "public_key");
@@ -299,7 +299,7 @@ public:
             {
                 const GetDns::Request* const request_ptr = request_ptr_itr->get();
                 const Query* const query_ptr = dynamic_cast<const Query*>(request_ptr);
-                if (query_ptr != NULL)
+                if (query_ptr != nullptr)
                 {
                     const std::string to_resolve = query_ptr->get_domain();
                     switch (query_ptr->get_status())
@@ -373,14 +373,14 @@ private:
     {
         const struct ::timespec now = TimeUnit::get_clock_monotonic();
         const TimeUnit::Nanoseconds remaining_time_nsec = time_end_ - now;
-        const ::uint64_t min_timeout_usec = 4000;//smaller value exhausts file descriptors :-(
+        const std::uint64_t min_timeout_usec = 4000;//smaller value exhausts file descriptors :-(
         if (remaining_time_nsec.value <= 0)
         {
             this->Event::Timeout::set(min_timeout_usec);
         }
         else
         {
-            const ::uint64_t the_one_query_time_usec = remaining_time_nsec.value / (1000 * remaining_queries_);
+            const std::uint64_t the_one_query_time_usec = remaining_time_nsec.value / (1000 * remaining_queries_);
             this->Event::Timeout::set(the_one_query_time_usec < min_timeout_usec
                                       ? min_timeout_usec
                                       : the_one_query_time_usec);
@@ -488,7 +488,7 @@ private:
             };
         const std::ptrdiff_t secure_prefix_idx = 0;
         const char* const* end_of_known_prefixes = known_prefixes + number_of_known_prefixes;
-        const char* domain_begin = NULL;
+        const char* domain_begin = nullptr;
         const char* const* known_prefix_ptr = known_prefixes;
         while (known_prefix_ptr < end_of_known_prefixes)
         {
@@ -504,7 +504,7 @@ private:
             }
             ++known_prefix_ptr;
         }
-        if (domain_begin == NULL)
+        if (domain_begin == nullptr)
         {
             throw std::runtime_error("invalid data received");
         }
@@ -542,11 +542,11 @@ private:
     }
     Answer& remove()
     {
-        if (event_ptr_ != NULL)
+        if (event_ptr_ != nullptr)
         {
             ::event_del(event_ptr_);
             ::event_free(event_ptr_);
-            event_ptr_ = NULL;
+            event_ptr_ = nullptr;
         }
         return *this;
     }
@@ -615,7 +615,7 @@ private:
     static void callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr)
     {
         Answer* const event_ptr = static_cast<Answer*>(_user_data_ptr);
-        if ((event_ptr != NULL) && (event_ptr->source_.get_descriptor() == _fd))
+        if ((event_ptr != nullptr) && (event_ptr->source_.get_descriptor() == _fd))
         {
             try
             {
@@ -664,7 +664,7 @@ public:
     { }
     int operator()()const
     {
-        Util::ImWriter to_parent(pipe_to_parent_, Util::ImWriter::stdout);
+        Util::ImWriter to_parent(pipe_to_parent_, Util::ImWriter::Stream::stdout);
         GetDns::Solver solver;
         if (answered_.empty())
         {
