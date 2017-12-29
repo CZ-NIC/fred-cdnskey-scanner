@@ -64,7 +64,7 @@ Data::Dict::Dict()
     {
         struct DictCreateFailure:Exception
         {
-            const char* what()const noexcept { return "Could not create extensions dict"; }
+            const char* what()const noexcept override { return "Could not create extensions dict"; }
         };
         throw DictCreateFailure();
     }
@@ -283,7 +283,7 @@ Data::List::List()
     {
         struct ListCreateFailure:Exception
         {
-            const char* what()const noexcept { return "Could not create extensions list"; }
+            const char* what()const noexcept override { return "Could not create extensions list"; }
         };
         throw ListCreateFailure();
     }
@@ -721,7 +721,7 @@ struct GetItem<boost::asio::ip::address, S, typename TypeTraits<typename S::Base
         }
         struct ConversionException:Exception
         {
-            const char* what()const noexcept { return "Could not convert address to string"; }
+            const char* what()const noexcept override { return "Could not convert address to string"; }
         };
         throw ConversionException();
     }

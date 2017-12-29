@@ -84,7 +84,7 @@ public:
         return hostname_;
     }
 private:
-    GetDns::Context& get_context()
+    GetDns::Context& get_context()override
     {
         if (context_ptr_ != nullptr)
         {
@@ -96,7 +96,7 @@ private:
         };
         throw NullDereferenceException();
     }
-    void join(Event::Base& _event_base)
+    void join(Event::Base& _event_base)override
     {
         if (context_ptr_ != nullptr)
         {
@@ -115,7 +115,7 @@ private:
         context_ptr_->set_timeout(timeout_sec_.value * 1000);
         status_ = Status::in_progress;
     }
-    void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t)
+    void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t)override
     {
         status_ = Status::completed;
         result_.clear();
@@ -142,15 +142,15 @@ private:
             result_.insert(GetDns::Data::From(address_data).get_value_of<boost::asio::ip::address>());
         }
     }
-    void on_cancel(::getdns_transaction_t)
+    void on_cancel(::getdns_transaction_t)override
     {
         status_ = Status::cancelled;
     }
-    void on_timeout(::getdns_transaction_t)
+    void on_timeout(::getdns_transaction_t)override
     {
         status_ = Status::timed_out;
     }
-    void on_error(::getdns_transaction_t)
+    void on_error(::getdns_transaction_t)override
     {
         status_ = Status::failed;
     }
@@ -188,11 +188,10 @@ public:
         {
             solver_.do_one_step();
             const GetDns::Solver::ListOfRequestPtr finished_requests = solver_.pop_finished_requests();
-            for (GetDns::Solver::ListOfRequestPtr::const_iterator request_ptr_itr = finished_requests.begin();
-                 request_ptr_itr != finished_requests.end(); ++request_ptr_itr)
+            for (const auto finished_request_ptr : finished_requests)
             {
-                const GetDns::Request* const request_ptr = request_ptr_itr->get();
-                const Query* const query_ptr = dynamic_cast<const Query*>(request_ptr);
+                auto const request_ptr = finished_request_ptr.get();
+                auto const query_ptr = dynamic_cast<const Query*>(request_ptr);
                 if (query_ptr != nullptr)
                 {
                     const std::string nameserver = query_ptr->get_hostname();
@@ -207,10 +206,9 @@ public:
                             }
                             else
                             {
-                                for (Query::Result::const_iterator addr_itr = addresses.begin();
-                                     addr_itr != addresses.end(); ++addr_itr)
+                                for (const auto addr : addresses)
                                 {
-                                    std::cout << "resolved " << nameserver << " " << *addr_itr << std::endl;
+                                    std::cout << "resolved " << nameserver << " " << addr << std::endl;
                                 }
                             }
                             break;
@@ -440,7 +438,7 @@ private:
         while (true)
         {
             static const ::ssize_t failure = -1;
-            const ::ssize_t read_retval = ::read(source_.get_descriptor(), buffer, sizeof(buffer));
+            const auto read_retval = ::read(source_.get_descriptor(), buffer, sizeof(buffer));
             const bool read_failed = (read_retval == failure);
             if (!read_failed)
             {
@@ -451,7 +449,7 @@ private:
                 }
                 else
                 {
-                    const std::size_t data_length = static_cast<std::size_t>(read_retval);
+                    const auto data_length = static_cast<std::size_t>(read_retval);
                     content_.append(buffer, data_length);
                     const bool all_available_data_already_read = data_length < sizeof(buffer);
                     if (!all_available_data_already_read)
@@ -481,7 +479,7 @@ private:
     }
     static void callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr)
     {
-        Answer* const event_ptr = static_cast<Answer*>(_user_data_ptr);
+        auto const event_ptr = static_cast<Answer*>(_user_data_ptr);
         if ((event_ptr != nullptr) && (event_ptr->source_.get_descriptor() == _fd))
         {
             try
@@ -506,7 +504,7 @@ private:
     std::string content_;
     bool source_stream_closed_;
     bool timed_out_;
-    static const short monitored_events_ = EV_READ;
+    static constexpr short monitored_events_ = EV_READ;
 };
 
 class ChildProcess
@@ -549,10 +547,8 @@ public:
             std::set<std::string> hostnames;
             HostnameResolver::Result::const_iterator resolved_itr = resolved_.begin();
             std::set<std::string>::const_iterator unresolved_itr = unresolved_.begin();
-            for (std::set<std::string>::const_iterator hostname_itr = hostnames_.begin();
-                 hostname_itr != hostnames_.end(); ++hostname_itr)
+            for (const auto hostname : hostnames_)
             {
-                const std::string hostname = *hostname_itr;
                 if ((resolved_itr != resolved_.end()) && (hostname == resolved_itr->first))
                 {
                     ++resolved_itr;
@@ -566,7 +562,7 @@ public:
                     hostnames.insert(hostname);
                 }
             }
-            const QueryGenerator resolve(
+            const auto resolve = QueryGenerator(
                     solver,
                     hostnames,
                     query_timeout_sec_,

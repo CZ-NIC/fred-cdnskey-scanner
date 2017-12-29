@@ -34,7 +34,7 @@ namespace {
 ::getdns_context* create_context(Context::InitialSettings initial_settings)
 {
     ::getdns_context* context_ptr = nullptr;
-    const ::getdns_return_t retval = ::getdns_context_create(
+    const auto retval = ::getdns_context_create(
             &context_ptr,
             initial_settings == Context::InitialSettings::from_os ? 1 : 0);
     if (retval == ::GETDNS_RETURN_GOOD)
@@ -55,7 +55,7 @@ namespace {
 Context::Context(Event::Base& _event_base, InitialSettings _initial_settings)
     : context_ptr_(create_context(_initial_settings))
 {
-    const ::getdns_return_t retval = ::getdns_extension_set_libevent_base(context_ptr_.get(), _event_base.get_base());
+    const auto retval = ::getdns_extension_set_libevent_base(context_ptr_.get(), _event_base.get_base());
     if (retval != ::GETDNS_RETURN_GOOD)
     {
         struct SetEventBaseException:Error
@@ -80,7 +80,7 @@ Context::~Context()
 {
     Data::Dict extensions = _extensions.into_dictionary();
     ::getdns_transaction_t transaction_id;
-    const ::getdns_return_t retval = ::getdns_address(
+    const auto retval = ::getdns_address(
             context_ptr_.get(),
             _hostname.c_str(),
             extensions.get_base_ptr(),
@@ -108,7 +108,7 @@ Context::~Context()
 {
     Data::Dict extensions = _extensions.into_dictionary();
     ::getdns_transaction_t transaction_id;
-    const ::getdns_return_t retval = ::getdns_general(
+    const auto retval = ::getdns_general(
             context_ptr_.get(),
             _domain.c_str(),
             GETDNS_RRTYPE_CDNSKEY,
@@ -143,7 +143,7 @@ Context& Context::set_dns_transport_list(const TransportList& _transport_list)
             }
             struct UnexpectedValue:Exception
             {
-                const char* what()const noexcept { return "unexpected value of TransportProtocol"; }
+                const char* what()const noexcept override { return "unexpected value of TransportProtocol"; }
             };
             throw UnexpectedValue();
         }
@@ -155,7 +155,7 @@ Context& Context::set_dns_transport_list(const TransportList& _transport_list)
             _transport_list.end(),
             std::back_inserter(list),
             Into::getdns_transport_list_t);
-    const ::getdns_return_t retval = ::getdns_context_set_dns_transport_list(
+    const auto retval = ::getdns_context_set_dns_transport_list(
             context_ptr_.get(),
             _transport_list.size(),
             list.data());
@@ -174,36 +174,35 @@ Context& Context::set_dns_transport_list(const TransportList& _transport_list)
 
 Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip::address>& _servers)
 {
-    typedef std::list<boost::asio::ip::address> Addresses;
     Data::List list;
-    for (Addresses::const_iterator address = _servers.begin(); address != _servers.end(); ++address)
+    for (const auto address : _servers)
     {
         Data::Dict item;
-        if (address->is_v4())
+        if (address.is_v4())
         {
             Data::set_item_of(item, "address_type", "IPv4");
             typedef boost::asio::ip::address_v4::bytes_type IpAddressData;
             const ::getdns_bindata address_data =
                     {
                         sizeof(IpAddressData::value_type[std::tuple_size<IpAddressData>::value]),
-                        address->to_v4().to_bytes().data()
+                        address.to_v4().to_bytes().data()
                     };
             Data::set_item_of(item, "address_data", &address_data);
         }
-        else if (address->is_v6())
+        else if (address.is_v6())
         {
             Data::set_item_of(item, "address_type", "IPv6");
             typedef boost::asio::ip::address_v6::bytes_type IpAddressData;
             const ::getdns_bindata address_data =
                     {
                         sizeof(IpAddressData::value_type[std::tuple_size<IpAddressData>::value]),
-                        address->to_v6().to_bytes().data()
+                        address.to_v6().to_bytes().data()
                     };
             Data::set_item_of(item, "address_data", &address_data);
         }
         Data::set_item_of(list, list.get_number_of_items(), const_cast<const Data::Dict&>(item).get_base_ptr());
     }
-    const ::getdns_return_t retval = ::getdns_context_set_upstream_recursive_servers(
+    const auto retval = ::getdns_context_set_upstream_recursive_servers(
             context_ptr_.get(),
             list.get_base_ptr());
     if (retval != ::GETDNS_RETURN_GOOD)
@@ -220,7 +219,7 @@ Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip
     {
         static void stub(::getdns_context* _context)
         {
-            const ::getdns_return_t retval = ::getdns_context_set_resolution_type(
+            const auto retval = ::getdns_context_set_resolution_type(
                     _context,
                     ::GETDNS_RESOLUTION_STUB);
             if (retval != ::GETDNS_RETURN_GOOD)
@@ -241,7 +240,7 @@ Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip
 
 Context& Context::set_follow_redirects(bool _yes)
 {
-    const ::getdns_return_t retval = ::getdns_context_set_follow_redirects(
+    const auto retval = ::getdns_context_set_follow_redirects(
             context_ptr_.get(),
             _yes ? ::GETDNS_REDIRECTS_FOLLOW : ::GETDNS_REDIRECTS_DO_NOT_FOLLOW);
     if (retval != ::GETDNS_RETURN_GOOD)
@@ -259,7 +258,7 @@ Context& Context::set_follow_redirects(bool _yes)
 
 Context& Context::set_timeout(std::uint64_t _value_ms)
 {
-    const ::getdns_return_t retval = ::getdns_context_set_timeout(context_ptr_.get(), _value_ms);
+    const auto retval = ::getdns_context_set_timeout(context_ptr_.get(), _value_ms);
     if (retval != ::GETDNS_RETURN_GOOD)
     {
         struct ContextSetTimeoutFailure:Error
@@ -276,17 +275,17 @@ Context& Context::set_timeout(std::uint64_t _value_ms)
 Context& Context::set_dnssec_trust_anchors(const std::list<Data::TrustAnchor>& _anchors)
 {
     Data::List anchors;
-    for (std::list<Data::TrustAnchor>::const_iterator anchor_itr = _anchors.begin(); anchor_itr != _anchors.end(); ++anchor_itr)
+    for (const auto anchor : _anchors)
     {
-        const Data::Dict anchor = Data::Dict::get_trust_anchor(
-                anchor_itr->zone,
-                anchor_itr->flags,
-                anchor_itr->protocol,
-                anchor_itr->algorithm,
-                anchor_itr->public_key);
-        Data::set_item_of(anchors, anchors.get_number_of_items(), anchor.get_base_ptr());
+        const auto anchor_dict = Data::Dict::get_trust_anchor(
+                anchor.zone,
+                anchor.flags,
+                anchor.protocol,
+                anchor.algorithm,
+                anchor.public_key);
+        Data::set_item_of(anchors, anchors.get_number_of_items(), anchor_dict.get_base_ptr());
     }
-    const ::getdns_return_t retval = ::getdns_context_set_dnssec_trust_anchors(
+    const auto retval = ::getdns_context_set_dnssec_trust_anchors(
             context_ptr_.get(),
             anchors.get_base_ptr());
     if (retval != ::GETDNS_RETURN_GOOD)

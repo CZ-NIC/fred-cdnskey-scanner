@@ -109,7 +109,7 @@ public:
         return task_;
     }
 private:
-    GetDns::Context& get_context()
+    GetDns::Context& get_context()override
     {
         if (context_ptr_ != nullptr)
         {
@@ -121,7 +121,7 @@ private:
         };
         throw NullDereferenceException();
     }
-    void join(Event::Base& _event_base)
+    void join(Event::Base& _event_base)override
     {
         if (context_ptr_ != nullptr)
         {
@@ -139,7 +139,7 @@ private:
         context_ptr_->set_upstream_recursive_servers(nameservers);
         status_ = Status::in_progress;
     }
-    void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t)
+    void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t)override
     {
         status_ = Status::completed;
         result_.clear();
@@ -148,7 +148,7 @@ private:
         {
             return;
         }
-        const GetDns::Data::List replies = GetDns::Data::From(replies_tree).get_value_of<GetDns::Data::List>();
+        const auto replies = GetDns::Data::From(replies_tree).get_value_of<GetDns::Data::List>();
         for (std::size_t reply_idx = 0; reply_idx < replies.get_number_of_items(); ++reply_idx)
         {
             const GetDns::Data::Value reply_value = GetDns::Data::get<GetDns::Data::Dict>(replies, reply_idx);
@@ -156,13 +156,13 @@ private:
             {
                 continue;
             }
-            const GetDns::Data::Dict reply = GetDns::Data::From(reply_value).get_value_of<GetDns::Data::Dict>();
+            const auto reply = GetDns::Data::From(reply_value).get_value_of<GetDns::Data::Dict>();
             const GetDns::Data::Value answer_value = GetDns::Data::get<GetDns::Data::List>(reply, "answer");
             if (!GetDns::Data::Is(answer_value).of<GetDns::Data::List>().type)
             {
                 continue;
             }
-            const GetDns::Data::List answers = GetDns::Data::From(answer_value).get_value_of<GetDns::Data::List>();
+            const auto answers = GetDns::Data::From(answer_value).get_value_of<GetDns::Data::List>();
             for (std::size_t answer_idx = 0; answer_idx < answers.get_number_of_items(); ++answer_idx)
             {
                 const GetDns::Data::Value answer_value = GetDns::Data::get<GetDns::Data::Dict>(answers, answer_idx);
@@ -170,13 +170,13 @@ private:
                 {
                     continue;
                 }
-                const GetDns::Data::Dict answer = GetDns::Data::From(answer_value).get_value_of<GetDns::Data::Dict>();
+                const auto answer = GetDns::Data::From(answer_value).get_value_of<GetDns::Data::Dict>();
                 const GetDns::Data::Value rdata_value = GetDns::Data::get<GetDns::Data::Dict>(answer, "rdata");
                 if (!GetDns::Data::Is(rdata_value).of<GetDns::Data::Dict>().type)
                 {
                     continue;
                 }
-                const GetDns::Data::Dict rdata = GetDns::Data::From(rdata_value).get_value_of<GetDns::Data::Dict>();
+                const auto rdata = GetDns::Data::From(rdata_value).get_value_of<GetDns::Data::Dict>();
 
                 Cdnskey cdnskey;
                 {
@@ -215,15 +215,15 @@ private:
             }
         }
     }
-    void on_cancel(::getdns_transaction_t)
+    void on_cancel(::getdns_transaction_t)override
     {
         status_ = Status::cancelled;
     }
-    void on_timeout(::getdns_transaction_t)
+    void on_timeout(::getdns_transaction_t)override
     {
         status_ = Status::timed_out;
     }
-    void on_error(::getdns_transaction_t)
+    void on_error(::getdns_transaction_t)override
     {
         status_ = Status::failed;
     }
@@ -257,50 +257,46 @@ public:
         while (0 < (remaining_queries_ + solver_.get_number_of_unresolved_requests()))
         {
             _solver.do_one_step();
-            const GetDns::Solver::ListOfRequestPtr finished_requests = solver_.pop_finished_requests();
-            for (GetDns::Solver::ListOfRequestPtr::const_iterator request_ptr_itr = finished_requests.begin();
-                 request_ptr_itr != finished_requests.end(); ++request_ptr_itr)
+            const auto finished_requests = solver_.pop_finished_requests();
+            for (const auto finished_request_ptr : finished_requests)
             {
-                const GetDns::Request* const request_ptr = request_ptr_itr->get();
-                const Query* const query_ptr = dynamic_cast<const Query*>(request_ptr);
+                const GetDns::Request* const request_ptr = finished_request_ptr.get();
+                auto const query_ptr = dynamic_cast<const Query*>(request_ptr);
                 if (query_ptr != nullptr)
                 {
                     const Insecure to_resolve = query_ptr->get_task();
                     const Nameservers& nameservers = to_resolve.nameservers;
                     if (query_ptr->get_status() == Query::Status::completed)
                     {
-                        const Query::Result result = query_ptr->get_result();
+                        const auto result = query_ptr->get_result();
                         if (result.empty())
                         {
-                            for (Nameservers::const_iterator nameserver_itr = nameservers.begin();
-                                 nameserver_itr != nameservers.end(); ++nameserver_itr)
+                            for (const auto nameserver : nameservers)
                             {
-                                std::cout << "insecure-empty " << *nameserver_itr << " "
+                                std::cout << "insecure-empty " << nameserver << " "
                                           << to_resolve.address << " "
                                           << to_resolve.domain << std::endl;
                             }
                         }
                         else
                         {
-                            for (Query::Result::const_iterator key_itr = result.begin(); key_itr != result.end(); ++key_itr)
+                            for (const auto key : result)
                             {
-                                for (Nameservers::const_iterator nameserver_itr = nameservers.begin();
-                                     nameserver_itr != nameservers.end(); ++nameserver_itr)
+                                for (const auto nameserver : nameservers)
                                 {
-                                    std::cout << "insecure " << *nameserver_itr << " "
+                                    std::cout << "insecure " << nameserver << " "
                                               << to_resolve.address << " "
                                               << to_resolve.domain << " "
-                                              << *key_itr << std::endl;
+                                              << key << std::endl;
                                 }
                             }
                         }
                     }
                     else
                     {
-                        for (Nameservers::const_iterator nameserver_itr = nameservers.begin();
-                             nameserver_itr != nameservers.end(); ++nameserver_itr)
+                        for (const auto nameserver : nameservers)
                         {
-                            std::cout << "unresolved " << *nameserver_itr << " "
+                            std::cout << "unresolved " << nameserver << " "
                                       << to_resolve.address << " "
                                       << to_resolve.domain << std::endl;
                         }
@@ -340,7 +336,7 @@ private:
     }
     QueryGenerator& set_time_of_next_query()
     {
-        const struct ::timespec now = TimeUnit::get_clock_monotonic();
+        const auto now = TimeUnit::get_clock_monotonic();
         const TimeUnit::Nanoseconds remaining_time_nsec = time_end_ - now;
         const std::uint64_t min_timeout_usec = 1000;//smaller value exhausts file descriptors :-(
         if (remaining_time_nsec.value <= 0)
@@ -567,8 +563,8 @@ private:
         char buffer[0x10000];
         while (true)
         {
-            static const ::ssize_t failure = -1;
-            const ::ssize_t read_retval = ::read(source_.get_descriptor(), buffer, sizeof(buffer));
+            static constexpr ::ssize_t failure = -1;
+            const auto read_retval = ::read(source_.get_descriptor(), buffer, sizeof(buffer));
             const bool read_failed = (read_retval == failure);
             if (!read_failed)
             {
@@ -579,7 +575,7 @@ private:
                 }
                 else
                 {
-                    const std::size_t data_length = static_cast<std::size_t>(read_retval);
+                    const auto data_length = static_cast<std::size_t>(read_retval);
                     content_.append(buffer, data_length);
                     const bool all_available_data_already_read = data_length < sizeof(buffer);
                     if (!all_available_data_already_read)
@@ -609,7 +605,7 @@ private:
     }
     static void callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr)
     {
-        Answer* const event_ptr = static_cast<Answer*>(_user_data_ptr);
+        auto const event_ptr = static_cast<Answer*>(_user_data_ptr);
         if ((event_ptr != nullptr) && (event_ptr->source_.get_descriptor() == _fd))
         {
             try
@@ -633,7 +629,7 @@ private:
     std::string content_;
     bool source_stream_closed_;
     bool timed_out_;
-    static const short monitored_events_ = EV_READ;
+    static constexpr short monitored_events_ = EV_READ;
 };
 
 class ChildProcess
@@ -670,16 +666,15 @@ public:
         {
             VectorOfInsecures to_resolve;
             to_resolve.reserve(to_resolve_.size() - answered_.size());
-            for (VectorOfInsecures::const_iterator to_resolve_itr = to_resolve_.begin();
-                 to_resolve_itr != to_resolve_.end(); ++to_resolve_itr)
+            for (const auto task : to_resolve_)
             {
-                const bool resolved = answered_.find(QueryDone(*to_resolve_itr)) != answered_.end();
+                const bool resolved = answered_.find(QueryDone(task)) != answered_.end();
                 if (!resolved)
                 {
-                    to_resolve.push_back(*to_resolve_itr);
+                    to_resolve.push_back(task);
                 }
             }
-            const QueryGenerator resolve(
+            const auto resolve = QueryGenerator(
                     solver,
                     to_resolve,
                     query_timeout_sec_,

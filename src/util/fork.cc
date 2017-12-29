@@ -20,10 +20,10 @@
 
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <signal.h>
 
-#include <cstring>
 #include <cerrno>
+#include <csignal>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 
@@ -31,7 +31,6 @@ namespace Util {
 
 Fork::~Fork()
 {
-
 }
 
 void Fork::init()
@@ -122,7 +121,7 @@ Fork::ChildResultStatus Fork::kill_child()
     throw KillFailed(errno);
 }
 
-const char* Fork::ChildIsStillRunning::what()const throw()
+const char* Fork::ChildIsStillRunning::what()const noexcept
 {
     return "child is still running";
 }

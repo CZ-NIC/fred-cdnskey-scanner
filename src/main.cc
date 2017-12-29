@@ -31,18 +31,20 @@
 #include <sys/resource.h>
 
 #include <algorithm>
-#include <string>
-#include <set>
-#include <map>
-#include <list>
-#include <vector>
 #include <iostream>
+#include <list>
+#include <map>
+#include <random>
+#include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
+#include <cerrno>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
-#include <cerrno>
 
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional.hpp>
@@ -323,8 +325,8 @@ int main(int argc, char* argv[])
         }
         const double query_distance_nsec = double(time_to_the_end.value) / total_number_of_queries;
         std::cerr << "query_distance = " << query_distance_nsec << "ns" << std::endl;
-        const TimeUnit::Nanoseconds time_for_insecure_resolver((query_distance_nsec * number_of_insecure_queries) + 0.5);
-        const TimeUnit::Nanoseconds time_for_secure_resolver((query_distance_nsec * number_of_secure_queries) + 0.5);
+        const TimeUnit::Nanoseconds time_for_insecure_resolver(std::llround(query_distance_nsec * number_of_insecure_queries));
+        const TimeUnit::Nanoseconds time_for_secure_resolver(std::llround(query_distance_nsec * number_of_secure_queries));
         InsecureCdnskeyResolver::resolve(
                 insecure_queries,
                 query_timeout,
@@ -629,7 +631,7 @@ void resolve_hostnames_of_nameservers(
             result.push_back(item);
         }
     }
-    std::random_shuffle(result.begin(), result.end());
+    std::shuffle(result.begin(), result.end(), std::mt19937(std::random_device()()));
 }
 
 Nameservers DomainsToScan::get_nameservers()const

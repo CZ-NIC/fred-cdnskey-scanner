@@ -19,8 +19,6 @@
 #ifndef PIPE_HH_2749D0FE6C3EBE19B1146E002E14C660//date "+%s"|md5sum|tr "[a-f]" "[A-F]"
 #define PIPE_HH_2749D0FE6C3EBE19B1146E002E14C660
 
-#include <cstddef>
-
 namespace Util {
 
 //public read end of pipe interface, hides write end of pipe
@@ -34,6 +32,8 @@ class Pipe
 public:
     Pipe();
     ~Pipe();
+    Pipe(const Pipe&) = delete;
+    Pipe& operator=(const Pipe&) = delete;
 private:
     static const unsigned number_of_descriptors_ = 2;
     int fd_[number_of_descriptors_];
@@ -47,11 +47,11 @@ class ImReader
 public:
     ImReader(Pipe& _pipe);
     ~ImReader() { }
+    ImReader(const ImReader&) = delete;
+    ImReader& operator=(const ImReader&) = delete;
     void set_nonblocking()const;
     int get_descriptor()const;
 private:
-    ImReader(const ImReader&) = delete;
-    ImReader& operator=(const ImReader&) = delete;
     Pipe& pipe_;
 };
 
@@ -65,9 +65,9 @@ public:
     };
     ImWriter(Pipe& _pipe, Stream _into);
     ~ImWriter() { }
-private:
     ImWriter(const ImWriter&) = delete;
     ImWriter& operator=(const ImWriter&) = delete;
+private:
     Pipe& pipe_;
 };
 
