@@ -85,20 +85,17 @@ public:
             context_ptr_ = nullptr;
         }
     }
-    struct Status
+    enum class Status
     {
-        enum Enum
-        {
-            none,
-            in_progress,
-            completed,
-            untrustworthy_answer,
-            cancelled,
-            timed_out,
-            failed
-        };
+        none,
+        in_progress,
+        completed,
+        untrustworthy_answer,
+        cancelled,
+        timed_out,
+        failed
     };
-    Status::Enum get_status()const
+    Status get_status()const
     {
         return status_;
     }
@@ -263,7 +260,7 @@ private:
     const std::list<boost::asio::ip::address> resolvers_;
     const std::list<GetDns::Data::TrustAnchor> trust_anchors_;
     GetDns::Context* context_ptr_;
-    Status::Enum status_;
+    Status status_;
     Result result_;
 };
 

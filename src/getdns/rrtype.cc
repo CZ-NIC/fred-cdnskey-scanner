@@ -24,7 +24,7 @@ namespace GetDns {
 
 namespace {
 
-template <RrType::Enum, typename>
+template <RrType, typename>
 struct FromTo;
 
 template <typename T>
@@ -47,7 +47,7 @@ struct FromTo<RrType::cdnskey, T>
 
 }//namespace GetDns::{anonymous}
 
-template <RrType::Enum type>
+template <RrType type>
     template <typename T>
     T From<type>::to()
 {

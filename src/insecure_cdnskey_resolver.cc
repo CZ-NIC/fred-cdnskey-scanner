@@ -78,19 +78,16 @@ public:
             context_ptr_ = nullptr;
         }
     }
-    struct Status
+    enum class Status
     {
-        enum Enum
-        {
-            none,
-            in_progress,
-            completed,
-            cancelled,
-            timed_out,
-            failed
-        };
+        none,
+        in_progress,
+        completed,
+        cancelled,
+        timed_out,
+        failed
     };
-    Status::Enum get_status()const
+    Status get_status()const
     {
         return status_;
     }
@@ -234,7 +231,7 @@ private:
     const TimeUnit::Seconds timeout_sec_;
     const boost::optional<GetDns::TransportList> transport_list_;
     GetDns::Context* context_ptr_;
-    Status::Enum status_;
+    Status status_;
     Result result_;
 };
 
