@@ -34,15 +34,12 @@ class Base
 public:
     Base();
     ~Base();
-    struct Result
+    enum class Result
     {
-        enum Enum
-        {
-            success,
-            no_events
-        };
+        success,
+        no_events
     };
-    Result::Enum loop();
+    Result loop();
     ::event_base* get_base();
 private:
     ::event_base* base_;

@@ -24,17 +24,14 @@
 namespace GetDns
 {
 
-struct Transport
+enum class TransportProtocol
 {
-    enum Protocol
-    {
-        udp,
-        tcp,
-        tls
-    };
+    udp,
+    tcp,
+    tls
 };
 
-typedef std::list<Transport::Protocol> TransportList;
+typedef std::list<TransportProtocol> TransportList;
 
 }//namespace GetDns
 

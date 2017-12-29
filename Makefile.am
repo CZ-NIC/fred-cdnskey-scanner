@@ -13,8 +13,7 @@ AM_CXXFLAGS = \
 		$(GETDNS_CXXFLAGS) \
 		$(GETDNSEXTRA_CXXFLAGS) \
 		$(LIBEVENT_CXXFLAGS) \
-		-fdiagnostics-color=always \
-		-W \
+		-fdiagnostics-color=auto \
 		-Wall \
 		-Wextra \
 		-ggdb \

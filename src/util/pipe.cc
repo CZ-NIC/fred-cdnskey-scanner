@@ -32,22 +32,19 @@ namespace {
 
 const int invalid_descriptor = -1;
 
-struct Direction
+enum class Direction
 {
-    enum Enum
-    {
-        read,
-        write
-    };
+    read,
+    write
 };
 
-template <Direction::Enum direction>
+template <Direction direction>
 void close(int (&pipe_fd)[2]);
 
-template <Direction::Enum direction>
+template <Direction direction>
 void dup(int (&pipe_fd)[2], int new_fd);
 
-template <Direction::Enum direction>
+template <Direction direction>
 struct Descriptor { };
 
 template <>
@@ -161,7 +158,7 @@ ImWriter::ImWriter(Pipe& _pipe, Stream _into)
 
 namespace {
 
-template <Direction::Enum direction>
+template <Direction direction>
 void close(int (&pipe_fd)[2])
 {
     int& fd = Descriptor<direction>::get(pipe_fd);
@@ -182,7 +179,7 @@ void close(int (&pipe_fd)[2])
     }
 }
 
-template <Direction::Enum direction>
+template <Direction direction>
 void dup(int (&pipe_fd)[2], int new_fd)
 {
     static const int failure = -1;

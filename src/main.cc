@@ -70,7 +70,7 @@ public:
 private:
     DomainsToScan& append_data(const char* _data_chunk, std::streamsize _data_chunk_length);
     void data_finished();
-    enum Section
+    enum class Section
     {
         none,
         secure,
@@ -286,10 +286,10 @@ int main(int argc, char* argv[])
         }
         const struct ::timespec t_end = TimeUnit::get_clock_monotonic() + runtime;
         GetDns::TransportList tcp_only;
-        tcp_only.push_back(GetDns::Transport::tcp);
+        tcp_only.push_back(GetDns::TransportProtocol::tcp);
         GetDns::TransportList udp_first;
-        udp_first.push_back(GetDns::Transport::udp);
-        udp_first.push_back(GetDns::Transport::tcp);
+        udp_first.push_back(GetDns::TransportProtocol::udp);
+        udp_first.push_back(GetDns::TransportProtocol::tcp);
         VectorOfInsecures insecure_queries;
         {
             const std::size_t estimated_total_number_of_queries =
@@ -369,7 +369,7 @@ int main(int argc, char* argv[])
 namespace {
 
 DomainsToScan::DomainsToScan(std::istream& _data_source)
-    : section_(none),
+    : section_(Section::none),
       data_starts_at_new_line_(true)
 {
     while (!_data_source.eof())
@@ -441,7 +441,7 @@ DomainsToScan& DomainsToScan::append_data(const char* _data_chunk, std::streamsi
             const bool section_of_signed_domains_reached = item == section_of_signed_domains;
             if (section_of_signed_domains_reached)
             {
-                section_ = secure;
+                section_ = Section::secure;
                 nameserver_.clear();
                 unsigned_domains_.clear();
                 data_starts_at_new_line_ = true;
@@ -452,7 +452,7 @@ DomainsToScan& DomainsToScan::append_data(const char* _data_chunk, std::streamsi
             const bool section_of_unsigned_domains_reached = item == section_of_unsigned_domains;
             if (section_of_unsigned_domains_reached)
             {
-                section_ = insecure;
+                section_ = Section::insecure;
                 nameserver_.clear();
                 unsigned_domains_.clear();
                 data_starts_at_new_line_ = true;
@@ -463,7 +463,7 @@ DomainsToScan& DomainsToScan::append_data(const char* _data_chunk, std::streamsi
         }
         switch (section_)
         {
-            case secure:
+            case Section::secure:
                 if (!item.empty())
                 {
                     signed_domains_.insert(item);
@@ -473,7 +473,7 @@ DomainsToScan& DomainsToScan::append_data(const char* _data_chunk, std::streamsi
                     std::cerr << "secure section contains an empty fqdn of domain" << std::endl;
                 }
                 break;
-            case insecure:
+            case Section::insecure:
             {
                 const bool item_is_nameserver = data_starts_at_new_line_;
                 if (item_is_nameserver)
@@ -499,12 +499,13 @@ DomainsToScan& DomainsToScan::append_data(const char* _data_chunk, std::streamsi
                 }
                 break;
             }
-            case none:
+            case Section::none:
                 throw std::runtime_error("no section specified yet");
         }
         if (line_end_reached)
         {
-            const bool nameserver_data_available = (section_ == insecure) && !nameserver_.empty() && !unsigned_domains_.empty();
+            const bool nameserver_data_available =
+                    (section_ == Section::insecure) && !nameserver_.empty() && !unsigned_domains_.empty();
             if (nameserver_data_available)
             {
                 unsigned_domains_of_namserver_.insert(std::make_pair(nameserver_, unsigned_domains_));
@@ -540,13 +541,13 @@ void DomainsToScan::data_finished()
     }
     switch (section_)
     {
-        case secure:
+        case Section::secure:
             if (!item.empty())
             {
                 signed_domains_.insert(item);
             }
             return;
-        case insecure:
+        case Section::insecure:
         {
             const bool item_is_nameserver = data_starts_at_new_line_;
             if (!item_is_nameserver)
@@ -565,7 +566,7 @@ void DomainsToScan::data_finished()
             }
             return;
         }
-        case none:
+        case Section::none:
             throw std::runtime_error("no section specified yet");
     }
 }

@@ -37,7 +37,7 @@ Base::Base()
     {
         struct BaseException:Exception
         {
-            const char* what()const throw() { return "Could not create event base"; }
+            const char* what()const noexcept { return "Could not create event base"; }
         };
         throw BaseException();
     }
@@ -52,31 +52,25 @@ Base::~Base()
     }
 }
 
-Base::Result::Enum Base::loop()
+Base::Result Base::loop()
 {
-    struct Repeate
+    enum class Repeate
     {
-        enum Flag
-        {
-            once,
-            while_an_active_consumer
-        };
+        once,
+        while_an_active_consumer
     };
-    struct Wait
+    enum class Wait
     {
-        enum Flag
-        {
-            next_event,
-            do_not_wait
-        };
+        next_event,
+        do_not_wait
     };
     struct Flag
     {
-        Flag(Repeate::Flag value):as_int(value == Repeate::once ? EVLOOP_ONCE : 0) { }
-        Flag(Wait::Flag value):as_int(value == Wait::do_not_wait ? EVLOOP_NONBLOCK : 0) { }
+        constexpr Flag(Repeate value):as_int(value == Repeate::once ? EVLOOP_ONCE : 0) { }
+        constexpr Flag(Wait value):as_int(value == Wait::do_not_wait ? EVLOOP_NONBLOCK : 0) { }
         const int as_int;
     };
-    const int flags = Flag(Repeate::once).as_int | Flag(Wait::next_event).as_int;
+    constexpr int flags = Flag(Repeate::once).as_int | Flag(Wait::next_event).as_int;
 
     switch (::event_base_loop(base_, flags))
     {
@@ -88,14 +82,14 @@ Base::Result::Enum Base::loop()
         {
             struct DispatchingException:Exception
             {
-                const char* what()const throw() { return "Error occurred during events loop"; }
+                const char* what()const noexcept { return "Error occurred during events loop"; }
             };
             throw DispatchingException();
         }
     }
     struct DispatchingException:Exception
     {
-        const char* what()const throw() { return "event_base_loop returned unexpected value"; }
+        const char* what()const noexcept { return "event_base_loop returned unexpected value"; }
     };
     throw DispatchingException();
 }
@@ -108,7 +102,7 @@ Base::Result::Enum Base::loop()
 namespace
 {
 
-const char dev_null_file[] = "/dev/null";
+constexpr char dev_null_file[] = "/dev/null";
 
 int get_file_descriptor()
 {
@@ -121,7 +115,7 @@ int get_file_descriptor()
     struct OpenFailure:Exception
     {
         OpenFailure(const char* _desc):desc_(_desc) { }
-        const char* what()const throw() { return desc_; }
+        const char* what()const noexcept { return desc_; }
         const char* const desc_;
     };
     const int c_errno = errno;
@@ -169,7 +163,7 @@ Timeout& Timeout::set(std::uint64_t _timeout_usec)
     }
     struct EventAddFailure:Exception
     {
-        const char* what()const throw() { return "event_add failed"; }
+        const char* what()const noexcept { return "event_add failed"; }
     };
     throw EventAddFailure();
 }

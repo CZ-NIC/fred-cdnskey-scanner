@@ -26,7 +26,9 @@
 
 #include <getdns/getdns.h>
 
+#include <cstdint>
 #include <list>
+#include <memory>
 #include <string>
 
 #include <boost/asio/ip/address.hpp>
@@ -37,15 +39,12 @@ namespace GetDns
 class Context
 {
 public:
-    struct InitialSettings
+    enum class InitialSettings
     {
-        enum Enum
-        {
-            none,
-            from_os,
-        };
+        none,
+        from_os,
     };
-    Context(Event::Base& _event_base, InitialSettings::Enum _initial_settings);
+    Context(Event::Base& _event_base, InitialSettings _initial_settings);
     ~Context();
     ::getdns_transaction_t add_request_for_address_resolving(
             const std::string& _hostname,
@@ -64,12 +63,13 @@ public:
     Context& set_dnssec_trust_anchors(const std::list<Data::TrustAnchor>& _anchors);
     ::getdns_context* release_context();
 private:
-    struct FreeOnExit
+    Context(const Context&) = delete;
+    Context& operator=(const Context&) = delete;
+    struct Deleter
     {
-        FreeOnExit(InitialSettings::Enum _initial_settings);
-        ~FreeOnExit();
-        ::getdns_context* context_ptr;
-    } free_on_exit_;
+        void operator()(::getdns_context*)const;
+    };
+    std::unique_ptr<::getdns_context, Deleter> context_ptr_;
 };
 
 }//namespace GetDns

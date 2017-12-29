@@ -30,7 +30,6 @@ AC_CHECK_FUNCS([waitpid],,[AC_MSG_ERROR([Function waitpid not found])])
 AC_CHECK_FUNCS([kill],,[AC_MSG_ERROR([Function kill not found])])
 
 AC_CHECK_HEADER([fcntl.h],,[AC_MSG_ERROR([Header fcntl.h not found])])
-AC_CHECK_HEADER([cstdint],,[AC_MSG_ERROR([Header cstdint not found])])
 AC_CHECK_HEADER([signal.h],,[AC_MSG_ERROR([Header signal.h not found])])
 AC_CHECK_HEADER([time.h],,[AC_MSG_ERROR([Header time.h not found])])
 AC_CHECK_HEADER([sys/time.h],,[AC_MSG_ERROR([Header sys/time.h not found])])
@@ -50,9 +49,7 @@ AC_CHECK_HEADER([boost/algorithm/string/predicate.hpp],,[AC_MSG_ERROR([Header bo
 AC_CHECK_HEADER([boost/algorithm/string/split.hpp],,[AC_MSG_ERROR([Header boost/algorithm/string/split.hpp not found])])
 AC_CHECK_HEADER([boost/asio/ip/address.hpp],,[AC_MSG_ERROR([Header boost/asio/ip/address.hpp not found])])
 AC_CHECK_HEADER([boost/lexical_cast.hpp],,[AC_MSG_ERROR([Header boost/lexical_cast.hpp not found])])
-AC_CHECK_HEADER([boost/noncopyable.hpp],,[AC_MSG_ERROR([Header boost/noncopyable.hpp not found])])
 AC_CHECK_HEADER([boost/optional.hpp],,[AC_MSG_ERROR([Header boost/optional.hpp not found])])
-AC_CHECK_HEADER([boost/shared_ptr.hpp],,[AC_MSG_ERROR([Header boost/shared_ptr.hpp not found])])
 AC_CHECK_HEADER([boost/variant.hpp],,[AC_MSG_ERROR([Header boost/variant.hpp not found])])
 AC_CHECK_HEADER([boost/variant/variant.hpp],,[AC_MSG_ERROR([Header boost/variant/variant.hpp not found])])
 

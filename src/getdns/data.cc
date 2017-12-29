@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <sstream>
 
 #include <boost/variant.hpp>
@@ -63,7 +64,7 @@ Data::Dict::Dict()
     {
         struct DictCreateFailure:Exception
         {
-            const char* what()const throw() { return "Could not create extensions dict"; }
+            const char* what()const noexcept { return "Could not create extensions dict"; }
         };
         throw DictCreateFailure();
     }
@@ -167,13 +168,11 @@ Data::Type Data::Dict::get_data_type_of_item(const std::string& _key)const
 
 std::string Data::Dict::get_pretty_string()const
 {
-    struct FreeOnExit
+    struct Deleter
     {
-        explicit FreeOnExit(char* _value):value(_value) { }
-        ~FreeOnExit() { ::free(value); }
-        char* value;
-    } pretty_string(::getdns_pretty_print_dict(*base_ptr_));
-    return pretty_string.value;
+        void operator()(char* _str)const { ::free(reinterpret_cast<void*>(_str)); }
+    };
+    return std::string(std::unique_ptr<char, Deleter>(::getdns_pretty_print_dict(*base_ptr_)).get());
 }
 
 Data::Dict::Base* Data::Dict::get_base_ptr()
@@ -222,18 +221,17 @@ Data::Dict Data::Dict::get_trust_anchor(
         std::uint16_t _flags,
         std::uint8_t _protocol,
         std::uint8_t _algorithm,
-         const Binary& _public_key)
+        const Binary& _public_key)
 {
     GetDns::Data::Dict anchor;
     GetDns::Data::set_item_of(anchor, "class", static_cast<std::uint32_t>(GETDNS_RRCLASS_IN));
     {
-        class FreeOnExit
+        struct DnsName
         {
-        public:
-            FreeOnExit(const std::string& _fqdn)
-                : bin_(nullptr)
+            static auto from_fqdn(const std::string& _fqdn)
             {
-                const ::getdns_return_t result = ::getdns_convert_fqdn_to_dns_name(_fqdn.c_str(), &bin_);
+                ::getdns_bindata* bin_data_ptr;
+                const ::getdns_return_t result = ::getdns_convert_fqdn_to_dns_name(_fqdn.c_str(), &bin_data_ptr);
                 if (result != ::GETDNS_RETURN_GOOD)
                 {
                     struct ConversionFailure:Error
@@ -244,23 +242,27 @@ Data::Dict Data::Dict::get_trust_anchor(
                     };
                     throw ConversionFailure(result, __FILE__, __LINE__);
                 }
-            }
-            ~FreeOnExit()
-            {
-                if (bin_ != nullptr)
+                struct Deleter
                 {
-                    ::free(bin_->data);
-                    ::free(bin_);
-                }
+                    void operator()(::getdns_bindata* _data_ptr)const
+                    {
+                        if (_data_ptr != nullptr)
+                        {
+                            ::free(_data_ptr->data);
+                            _data_ptr->data = nullptr;
+                            ::free(_data_ptr);
+                        }
+                    }
+                };
+                return std::unique_ptr<::getdns_bindata, Deleter>(bin_data_ptr);
             }
-            const ::getdns_bindata* get_bin_data()const { return const_cast<const ::getdns_bindata*>(bin_); }
-        private:
-            ::getdns_bindata* bin_;
-        } zone(_zone);
-        GetDns::Data::set_item_of(anchor, "name", zone.get_bin_data());
+        };
+        const auto zone = DnsName::from_fqdn(_zone);
+        GetDns::Data::set_item_of(anchor, "name", const_cast<const ::getdns_bindata*>(zone.get()));
     }
     GetDns::Data::set_item_of(anchor, "type", static_cast<std::uint32_t>(GETDNS_RRTYPE_DNSKEY));
-    GetDns::Data::set_item_of(anchor, "ttl", static_cast<std::uint32_t>(172800));
+    constexpr auto two_days_in_seconds = 2 * 24 * 3600;
+    GetDns::Data::set_item_of(anchor, "ttl", static_cast<std::uint32_t>(two_days_in_seconds));
     GetDns::Data::Dict rdata;
     GetDns::Data::set_item_of(rdata, "flags", static_cast<std::uint32_t>(_flags));
     GetDns::Data::set_item_of(rdata, "protocol", static_cast<std::uint32_t>(_protocol));
@@ -281,7 +283,7 @@ Data::List::List()
     {
         struct ListCreateFailure:Exception
         {
-            const char* what()const throw() { return "Could not create extensions list"; }
+            const char* what()const noexcept { return "Could not create extensions list"; }
         };
         throw ListCreateFailure();
     }
@@ -708,19 +710,18 @@ struct GetItem<boost::asio::ip::address, S, typename TypeTraits<typename S::Base
         {
             throw Error(result, __FILE__, __LINE__);
         }
-        struct FreeOnExit
+        struct Deleter
         {
-            explicit FreeOnExit(char* _value):value(_value) { }
-            ~FreeOnExit() { ::free(value); }
-            char* value;
-        } ip_address(::getdns_display_ip_address(item));
-        if (ip_address.value != nullptr)
+            void operator()(char* _value)const { ::free(_value); }
+        };
+        const auto ip_address = std::unique_ptr<char, Deleter>(::getdns_display_ip_address(item));
+        if (ip_address != nullptr)
         {
-            return boost::asio::ip::address::from_string(ip_address.value);
+            return boost::asio::ip::address::from_string(ip_address.get());
         }
         struct ConversionException:Exception
         {
-            const char* what()const throw() { return "Could not convert address to string"; }
+            const char* what()const noexcept { return "Could not convert address to string"; }
         };
         throw ConversionException();
     }
@@ -786,19 +787,19 @@ struct GetItem<Data::Fqdn, S, typename TypeTraits<typename S::Base*>::IndexedByT
                 throw Error(result, __FILE__, __LINE__);
             }
         }
-        struct FreeOnExit
-        {
-            FreeOnExit():value(nullptr) { }
-            ~FreeOnExit() { ::free(value); }
-            char* value;
-        } fqdn;
-        const ::getdns_return_t result = ::getdns_convert_dns_name_to_fqdn(item, &fqdn.value);
+        char* fqdn_str = nullptr;
+        const ::getdns_return_t result = ::getdns_convert_dns_name_to_fqdn(item, &fqdn_str);
         if (result == ::GETDNS_RETURN_GOOD)
         {
-            Data::Fqdn retval;
-            if (fqdn.value != nullptr)
+            struct Deleter
             {
-                retval.value =  fqdn.value;
+                void operator()(char* _value)const { ::free(_value); }
+            };
+            const auto fqdn = std::unique_ptr<char, Deleter>(fqdn_str);
+            Data::Fqdn retval;
+            if (fqdn != nullptr)
+            {
+                retval.value = fqdn.get();
             }
             return retval;
         }
