@@ -30,8 +30,6 @@ AC_CHECK_FUNCS([waitpid],,[AC_MSG_ERROR([Function waitpid not found])])
 AC_CHECK_FUNCS([kill],,[AC_MSG_ERROR([Function kill not found])])
 
 AC_CHECK_HEADER([fcntl.h],,[AC_MSG_ERROR([Header fcntl.h not found])])
-AC_CHECK_HEADER([signal.h],,[AC_MSG_ERROR([Header signal.h not found])])
-AC_CHECK_HEADER([time.h],,[AC_MSG_ERROR([Header time.h not found])])
 AC_CHECK_HEADER([sys/time.h],,[AC_MSG_ERROR([Header sys/time.h not found])])
 AC_CHECK_HEADER([sys/stat.h],,[AC_MSG_ERROR([Header sys/stat.h not found])])
 AC_CHECK_HEADER([sys/resource.h],,[AC_MSG_ERROR([Header sys/resource.h not found])])

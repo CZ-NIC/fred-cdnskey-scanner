@@ -20,7 +20,7 @@
 #define TIME_UNIT_HH_AA862C0A2A13AEFBE6D015A289BED606
 
 #include <cstdint>
-#include <time.h>
+#include <ctime>
 
 namespace TimeUnit {
 

@@ -41,7 +41,7 @@ Error::Error(::getdns_return_t _error_code, const char* _file, int _line)
     : msg_(to_msg(_error_code, _file, _line))
 { }
 
-const char* Error::what()const throw()
+const char* Error::what()const noexcept
 {
     return msg_.c_str();
 }

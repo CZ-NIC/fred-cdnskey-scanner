@@ -37,7 +37,7 @@ Base::Base()
     {
         struct BaseException:Exception
         {
-            const char* what()const noexcept { return "Could not create event base"; }
+            const char* what()const noexcept override { return "Could not create event base"; }
         };
         throw BaseException();
     }
@@ -82,14 +82,14 @@ Base::Result Base::loop()
         {
             struct DispatchingException:Exception
             {
-                const char* what()const noexcept { return "Error occurred during events loop"; }
+                const char* what()const noexcept override { return "Error occurred during events loop"; }
             };
             throw DispatchingException();
         }
     }
     struct DispatchingException:Exception
     {
-        const char* what()const noexcept { return "event_base_loop returned unexpected value"; }
+        const char* what()const noexcept override { return "event_base_loop returned unexpected value"; }
     };
     throw DispatchingException();
 }
@@ -115,7 +115,7 @@ int get_file_descriptor()
     struct OpenFailure:Exception
     {
         OpenFailure(const char* _desc):desc_(_desc) { }
-        const char* what()const noexcept { return desc_; }
+        const char* what()const noexcept override { return desc_; }
         const char* const desc_;
     };
     const int c_errno = errno;
@@ -163,7 +163,7 @@ Timeout& Timeout::set(std::uint64_t _timeout_usec)
     }
     struct EventAddFailure:Exception
     {
-        const char* what()const noexcept { return "event_add failed"; }
+        const char* what()const noexcept override { return "event_add failed"; }
     };
     throw EventAddFailure();
 }
@@ -195,7 +195,7 @@ void Timeout::on_event(short _events)
 
 void Timeout::callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr)
 {
-    Timeout* const event_ptr = static_cast<Timeout*>(_user_data_ptr);
+    auto const event_ptr = static_cast<Timeout*>(_user_data_ptr);
     if ((event_ptr != nullptr) && (event_ptr->fd_ == _fd))
     {
         try

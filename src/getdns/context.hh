@@ -39,6 +39,8 @@ namespace GetDns
 class Context
 {
 public:
+    Context(const Context&) = delete;
+    Context& operator=(const Context&) = delete;
     enum class InitialSettings
     {
         none,
@@ -63,8 +65,6 @@ public:
     Context& set_dnssec_trust_anchors(const std::list<Data::TrustAnchor>& _anchors);
     ::getdns_context* release_context();
 private:
-    Context(const Context&) = delete;
-    Context& operator=(const Context&) = delete;
     struct Deleter
     {
         void operator()(::getdns_context*)const;

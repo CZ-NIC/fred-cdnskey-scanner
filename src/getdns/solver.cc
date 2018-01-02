@@ -67,7 +67,7 @@ void Solver::do_one_step()
     }
     struct UnexpectedResult:Exception
     {
-        const char* what()const noexcept { return "event_base_loop returned unexpected value"; }
+        const char* what()const noexcept override { return "event_base_loop returned unexpected value"; }
     };
     throw UnexpectedResult();
 }

@@ -31,7 +31,7 @@ class Error:public Exception
 {
 public:
     Error(::getdns_return_t _error_code, const char* _file, int _line);
-    const char* what()const noexcept;
+    const char* what()const noexcept override;
 private:
     const std::string msg_;
 };
