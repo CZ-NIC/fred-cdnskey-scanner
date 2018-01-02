@@ -32,7 +32,7 @@ public:
     Fork(const C& _child);
     struct ChildIsStillRunning:std::exception
     {
-        const char* what()const throw();
+        const char* what()const noexcept override;
     };
     class ChildResultStatus
     {
@@ -43,15 +43,12 @@ public:
         bool signaled()const;
         int get_signal_number()const;
     private:
-        struct Waitpid
+        enum class WaitpidOption
         {
-            enum Option
-            {
-                wait_on_exit,
-                return_immediately
-            };
+            wait_on_exit,
+            return_immediately
         };
-        ChildResultStatus(Fork& _parent, Waitpid::Option _option);
+        ChildResultStatus(Fork& _parent, WaitpidOption _option);
         const int status_;
         friend class Fork;
     };

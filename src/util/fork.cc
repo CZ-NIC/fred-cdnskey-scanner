@@ -20,10 +20,10 @@
 
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <signal.h>
 
-#include <cstring>
 #include <cerrno>
+#include <csignal>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 
@@ -31,7 +31,6 @@ namespace Util {
 
 Fork::~Fork()
 {
-
 }
 
 void Fork::init()
@@ -53,7 +52,7 @@ Fork::ChildResultStatus Fork::get_child_result_status()
     {
         throw std::runtime_error("no child is running");
     }
-    return ChildResultStatus(*this, ChildResultStatus::Waitpid::return_immediately);
+    return ChildResultStatus(*this, ChildResultStatus::WaitpidOption::return_immediately);
 }
 
 namespace {
@@ -113,7 +112,7 @@ Fork::ChildResultStatus Fork::kill_child()
     const int kill_result = ::kill(fork_result_, SIGKILL);
     if (kill_result == success)
     {
-        return ChildResultStatus(*this, ChildResultStatus::Waitpid::wait_on_exit);
+        return ChildResultStatus(*this, ChildResultStatus::WaitpidOption::wait_on_exit);
     }
     struct KillFailed:std::runtime_error
     {
@@ -122,13 +121,13 @@ Fork::ChildResultStatus Fork::kill_child()
     throw KillFailed(errno);
 }
 
-const char* Fork::ChildIsStillRunning::what()const throw()
+const char* Fork::ChildIsStillRunning::what()const noexcept
 {
     return "child is still running";
 }
 
-Fork::ChildResultStatus::ChildResultStatus(Fork& _parent, Waitpid::Option _option)
-    : status_(get_process_exit_status(_parent.fork_result_, _option == Waitpid::wait_on_exit))
+Fork::ChildResultStatus::ChildResultStatus(Fork& _parent, WaitpidOption _option)
+    : status_(get_process_exit_status(_parent.fork_result_, _option == WaitpidOption::wait_on_exit))
 {
     _parent.child_is_running_ = false;
 }

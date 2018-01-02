@@ -22,17 +22,14 @@
 namespace GetDns
 {
 
-struct RrType
+enum class RrType
 {
-    enum Enum
-    {
-        a,
-        aaaa,
-        cdnskey
-    };
+    a,
+    aaaa,
+    cdnskey
 };
 
-template <RrType::Enum type>
+template <RrType type>
 struct From
 {
     template <typename T>

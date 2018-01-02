@@ -58,7 +58,7 @@ Solver::~Solver()
 
 void Solver::do_one_step()
 {
-    const Event::Base::Result::Enum loop_status = event_base_.loop();
+    const Event::Base::Result loop_status = event_base_.loop();
     switch (loop_status)
     {
     case Event::Base::Result::success:
@@ -67,7 +67,7 @@ void Solver::do_one_step()
     }
     struct UnexpectedResult:Exception
     {
-        const char* what()const throw() { return "event_base_loop returned unexpected value"; }
+        const char* what()const noexcept override { return "event_base_loop returned unexpected value"; }
     };
     throw UnexpectedResult();
 }

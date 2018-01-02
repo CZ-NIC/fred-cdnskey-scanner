@@ -21,6 +21,7 @@
 
 #include <event2/event.h>
 
+#include <cstdint>
 #include <exception>
 
 namespace Event
@@ -33,15 +34,12 @@ class Base
 public:
     Base();
     ~Base();
-    struct Result
+    enum class Result
     {
-        enum Enum
-        {
-            success,
-            no_events
-        };
+        success,
+        no_events
     };
-    Result::Enum loop();
+    Result loop();
     ::event_base* get_base();
 private:
     ::event_base* base_;
@@ -59,7 +57,7 @@ class Timeout:protected OnTimeout
 public:
     Timeout(Base& _base);
     ~Timeout();
-    Timeout& set(::uint64_t _timeout_usec);
+    Timeout& set(std::uint64_t _timeout_usec);
     Timeout& remove();
 private:
     void on_event(short _events);

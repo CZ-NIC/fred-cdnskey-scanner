@@ -20,17 +20,30 @@
 
 #include <getdns/getdns_extra.h>
 
-namespace GetDns
-{
+#include <cstdint>
+#include <sstream>
 
-Error::Error(getdns_return_t _error_code)
-    : error_code_(_error_code)
+namespace GetDns {
+
+namespace {
+
+std::string to_msg(::getdns_return_t error_code, const char* file, int line)
+{
+    std::ostringstream msg;
+    msg << "at " << file << ":" << line << " occurred ";
+    auto const error_str = ::getdns_get_errorstr_by_id(static_cast<std::uint16_t>(error_code));
+    return msg.str() + (error_str != nullptr ? error_str : "Unknown error");
+}
+
+}
+
+Error::Error(::getdns_return_t _error_code, const char* _file, int _line)
+    : msg_(to_msg(_error_code, _file, _line))
 { }
 
-const char* Error::what()const throw()
+const char* Error::what()const noexcept
 {
-    const char* const error_str = getdns_get_errorstr_by_id(static_cast<uint16_t>(error_code_));
-    return error_str != NULL ? error_str : "Unknown error";
+    return msg_.c_str();
 }
 
 }//namespace GetDns

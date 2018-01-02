@@ -19,10 +19,6 @@
 #ifndef PIPE_HH_2749D0FE6C3EBE19B1146E002E14C660//date "+%s"|md5sum|tr "[a-f]" "[A-F]"
 #define PIPE_HH_2749D0FE6C3EBE19B1146E002E14C660
 
-#include <cstddef>
-
-#include <boost/noncopyable.hpp>
-
 namespace Util {
 
 //public read end of pipe interface, hides write end of pipe
@@ -36,6 +32,8 @@ class Pipe
 public:
     Pipe();
     ~Pipe();
+    Pipe(const Pipe&) = delete;
+    Pipe& operator=(const Pipe&) = delete;
 private:
     static const unsigned number_of_descriptors_ = 2;
     int fd_[number_of_descriptors_];
@@ -44,27 +42,31 @@ private:
     friend class ImWriter;
 };
 
-class ImReader:private boost::noncopyable
+class ImReader
 {
 public:
     ImReader(Pipe& _pipe);
     ~ImReader() { }
+    ImReader(const ImReader&) = delete;
+    ImReader& operator=(const ImReader&) = delete;
     void set_nonblocking()const;
     int get_descriptor()const;
 private:
     Pipe& pipe_;
 };
 
-class ImWriter:private boost::noncopyable
+class ImWriter
 {
 public:
-    enum Stream
+    enum class Stream
     {
         stdout,
         stderr
     };
     ImWriter(Pipe& _pipe, Stream _into);
     ~ImWriter() { }
+    ImWriter(const ImWriter&) = delete;
+    ImWriter& operator=(const ImWriter&) = delete;
 private:
     Pipe& pipe_;
 };

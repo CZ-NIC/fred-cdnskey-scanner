@@ -33,11 +33,11 @@ namespace Event
 Base::Base()
     : base_(::event_base_new())
 {
-    if (base_ == NULL)
+    if (base_ == nullptr)
     {
         struct BaseException:Exception
         {
-            const char* what()const throw() { return "Could not create event base"; }
+            const char* what()const noexcept override { return "Could not create event base"; }
         };
         throw BaseException();
     }
@@ -45,38 +45,32 @@ Base::Base()
 
 Base::~Base()
 {
-    if (base_ != NULL)
+    if (base_ != nullptr)
     {
         ::event_base_free(base_);
-        base_ = NULL;
+        base_ = nullptr;
     }
 }
 
-Base::Result::Enum Base::loop()
+Base::Result Base::loop()
 {
-    struct Repeate
+    enum class Repeate
     {
-        enum Flag
-        {
-            once,
-            while_an_active_consumer
-        };
+        once,
+        while_an_active_consumer
     };
-    struct Wait
+    enum class Wait
     {
-        enum Flag
-        {
-            next_event,
-            do_not_wait
-        };
+        next_event,
+        do_not_wait
     };
     struct Flag
     {
-        Flag(Repeate::Flag value):as_int(value == Repeate::once ? EVLOOP_ONCE : 0) { }
-        Flag(Wait::Flag value):as_int(value == Wait::do_not_wait ? EVLOOP_NONBLOCK : 0) { }
+        constexpr Flag(Repeate value):as_int(value == Repeate::once ? EVLOOP_ONCE : 0) { }
+        constexpr Flag(Wait value):as_int(value == Wait::do_not_wait ? EVLOOP_NONBLOCK : 0) { }
         const int as_int;
     };
-    const int flags = Flag(Repeate::once).as_int | Flag(Wait::next_event).as_int;
+    constexpr int flags = Flag(Repeate::once).as_int | Flag(Wait::next_event).as_int;
 
     switch (::event_base_loop(base_, flags))
     {
@@ -88,14 +82,14 @@ Base::Result::Enum Base::loop()
         {
             struct DispatchingException:Exception
             {
-                const char* what()const throw() { return "Error occurred during events loop"; }
+                const char* what()const noexcept override { return "Error occurred during events loop"; }
             };
             throw DispatchingException();
         }
     }
     struct DispatchingException:Exception
     {
-        const char* what()const throw() { return "event_base_loop returned unexpected value"; }
+        const char* what()const noexcept override { return "event_base_loop returned unexpected value"; }
     };
     throw DispatchingException();
 }
@@ -108,7 +102,7 @@ Base::Result::Enum Base::loop()
 namespace
 {
 
-const char dev_null_file[] = "/dev/null";
+constexpr char dev_null_file[] = "/dev/null";
 
 int get_file_descriptor()
 {
@@ -121,7 +115,7 @@ int get_file_descriptor()
     struct OpenFailure:Exception
     {
         OpenFailure(const char* _desc):desc_(_desc) { }
-        const char* what()const throw() { return desc_; }
+        const char* what()const noexcept override { return desc_; }
         const char* const desc_;
     };
     const int c_errno = errno;
@@ -138,7 +132,7 @@ Timeout::Timeout(Base& _base)
 
 Timeout::~Timeout()
 {
-    if (event_ptr_ != NULL)
+    if (event_ptr_ != nullptr)
     {
         ::event_del(event_ptr_);
         ::event_free(event_ptr_);
@@ -150,7 +144,7 @@ Timeout::~Timeout()
     }
 }
 
-Timeout& Timeout::set(::uint64_t _timeout_usec)
+Timeout& Timeout::set(std::uint64_t _timeout_usec)
 {
     const int success = 0;
     struct ::timeval timeout;
@@ -169,18 +163,18 @@ Timeout& Timeout::set(::uint64_t _timeout_usec)
     }
     struct EventAddFailure:Exception
     {
-        const char* what()const throw() { return "event_add failed"; }
+        const char* what()const noexcept override { return "event_add failed"; }
     };
     throw EventAddFailure();
 }
 
 Timeout& Timeout::remove()
 {
-    if (event_ptr_ != NULL)
+    if (event_ptr_ != nullptr)
     {
         ::event_del(event_ptr_);
         ::event_free(event_ptr_);
-        event_ptr_ = NULL;
+        event_ptr_ = nullptr;
     }
     const int invalid_descriptor = -1;
     if (fd_ != invalid_descriptor)
@@ -201,8 +195,8 @@ void Timeout::on_event(short _events)
 
 void Timeout::callback_routine(evutil_socket_t _fd, short _events, void* _user_data_ptr)
 {
-    Timeout* const event_ptr = static_cast<Timeout*>(_user_data_ptr);
-    if ((event_ptr != NULL) && (event_ptr->fd_ == _fd))
+    auto const event_ptr = static_cast<Timeout*>(_user_data_ptr);
+    if ((event_ptr != nullptr) && (event_ptr->fd_ == _fd))
     {
         try
         {

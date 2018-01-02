@@ -1,5 +1,5 @@
 AC_PREREQ([2.59])
-AC_INIT([cdnskey-scanner], [1.0.1])
+AC_INIT([cdnskey-scanner], [1.0.2])
 AM_INIT_AUTOMAKE([subdir-objects])
 AC_CONFIG_SRCDIR([src/main.cc])
 AC_CONFIG_MACRO_DIR([m4])
@@ -9,11 +9,15 @@ AC_LANG(C++)
 : ${CFLAGS=""}   AC_PROG_CC
 : ${CXXFLAGS=""} AC_PROG_CXX
 
+AX_CHECK_COMPILE_FLAG([-std=c++14],
+                      [CXXFLAGS="$CXXFLAGS -std=c++14"],
+                      [AC_MSG_ERROR([This project requires -std=c++14 support])])
+
 AX_BOOST_BASE
 AX_BOOST_SYSTEM
 
-PKG_CHECK_MODULES(GETDNS, [getdns >= 1.1.2])
-PKG_CHECK_MODULES(GETDNSEXTRA, [getdns_ext_event >= 1.1.2])
+PKG_CHECK_MODULES(GETDNS, [getdns >= 1.3.0])
+PKG_CHECK_MODULES(GETDNSEXTRA, [getdns_ext_event >= 1.3.0])
 PKG_CHECK_MODULES(LIBEVENT, [libevent >= 2.0.0])
 
 AC_CHECK_FUNCS([clock_gettime],,[AC_MSG_ERROR([Function clock_gettime not found])])
@@ -26,9 +30,6 @@ AC_CHECK_FUNCS([waitpid],,[AC_MSG_ERROR([Function waitpid not found])])
 AC_CHECK_FUNCS([kill],,[AC_MSG_ERROR([Function kill not found])])
 
 AC_CHECK_HEADER([fcntl.h],,[AC_MSG_ERROR([Header fcntl.h not found])])
-AC_CHECK_HEADER([stdint.h],,[AC_MSG_ERROR([Header stdint.h not found])])
-AC_CHECK_HEADER([signal.h],,[AC_MSG_ERROR([Header signal.h not found])])
-AC_CHECK_HEADER([time.h],,[AC_MSG_ERROR([Header time.h not found])])
 AC_CHECK_HEADER([sys/time.h],,[AC_MSG_ERROR([Header sys/time.h not found])])
 AC_CHECK_HEADER([sys/stat.h],,[AC_MSG_ERROR([Header sys/stat.h not found])])
 AC_CHECK_HEADER([sys/resource.h],,[AC_MSG_ERROR([Header sys/resource.h not found])])
@@ -46,9 +47,7 @@ AC_CHECK_HEADER([boost/algorithm/string/predicate.hpp],,[AC_MSG_ERROR([Header bo
 AC_CHECK_HEADER([boost/algorithm/string/split.hpp],,[AC_MSG_ERROR([Header boost/algorithm/string/split.hpp not found])])
 AC_CHECK_HEADER([boost/asio/ip/address.hpp],,[AC_MSG_ERROR([Header boost/asio/ip/address.hpp not found])])
 AC_CHECK_HEADER([boost/lexical_cast.hpp],,[AC_MSG_ERROR([Header boost/lexical_cast.hpp not found])])
-AC_CHECK_HEADER([boost/noncopyable.hpp],,[AC_MSG_ERROR([Header boost/noncopyable.hpp not found])])
 AC_CHECK_HEADER([boost/optional.hpp],,[AC_MSG_ERROR([Header boost/optional.hpp not found])])
-AC_CHECK_HEADER([boost/shared_ptr.hpp],,[AC_MSG_ERROR([Header boost/shared_ptr.hpp not found])])
 AC_CHECK_HEADER([boost/variant.hpp],,[AC_MSG_ERROR([Header boost/variant.hpp not found])])
 AC_CHECK_HEADER([boost/variant/variant.hpp],,[AC_MSG_ERROR([Header boost/variant/variant.hpp not found])])
 

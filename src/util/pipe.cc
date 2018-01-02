@@ -21,10 +21,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <cerrno>
+#include <cstddef>
+#include <cstring>
 #include <stdexcept>
 #include <sstream>
-#include <cstring>
-#include <cerrno>
 
 namespace Util {
 
@@ -32,22 +33,19 @@ namespace {
 
 const int invalid_descriptor = -1;
 
-struct Direction
+enum class Direction
 {
-    enum Enum
-    {
-        read,
-        write
-    };
+    read,
+    write
 };
 
-template <Direction::Enum direction>
+template <Direction direction>
 void close(int (&pipe_fd)[2]);
 
-template <Direction::Enum direction>
+template <Direction direction>
 void dup(int (&pipe_fd)[2], int new_fd);
 
-template <Direction::Enum direction>
+template <Direction direction>
 struct Descriptor { };
 
 template <>
@@ -142,9 +140,9 @@ int get_descriptor_number_of(ImWriter::Stream stream)
 {
     switch (stream)
     {
-        case ImWriter::stdout:
+        case ImWriter::Stream::stdout:
             return STDOUT_FILENO;
-        case ImWriter::stderr:
+        case ImWriter::Stream::stderr:
             return STDERR_FILENO;
     }
     throw std::logic_error("unexpected enum value");
@@ -161,7 +159,7 @@ ImWriter::ImWriter(Pipe& _pipe, Stream _into)
 
 namespace {
 
-template <Direction::Enum direction>
+template <Direction direction>
 void close(int (&pipe_fd)[2])
 {
     int& fd = Descriptor<direction>::get(pipe_fd);
@@ -182,7 +180,7 @@ void close(int (&pipe_fd)[2])
     }
 }
 
-template <Direction::Enum direction>
+template <Direction direction>
 void dup(int (&pipe_fd)[2], int new_fd)
 {
     static const int failure = -1;
