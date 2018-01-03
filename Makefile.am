@@ -17,7 +17,7 @@ AM_CXXFLAGS = \
 		-Wall \
 		-Wextra \
 		-ggdb \
-		-O0
+		-O2
 
 SUBDIRS = .
 
