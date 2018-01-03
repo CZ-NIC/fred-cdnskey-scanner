@@ -182,10 +182,11 @@ Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip
         {
             Data::set_item_of(item, "address_type", "IPv4");
             typedef boost::asio::ip::address_v4::bytes_type IpAddressData;
+            auto bytes = address.to_v4().to_bytes();
             const ::getdns_bindata address_data =
                     {
                         sizeof(IpAddressData::value_type[std::tuple_size<IpAddressData>::value]),
-                        address.to_v4().to_bytes().data()
+                        bytes.data()
                     };
             Data::set_item_of(item, "address_data", &address_data);
         }
@@ -193,10 +194,11 @@ Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip
         {
             Data::set_item_of(item, "address_type", "IPv6");
             typedef boost::asio::ip::address_v6::bytes_type IpAddressData;
+            auto bytes = address.to_v6().to_bytes();
             const ::getdns_bindata address_data =
                     {
                         sizeof(IpAddressData::value_type[std::tuple_size<IpAddressData>::value]),
-                        address.to_v6().to_bytes().data()
+                        bytes.data()
                     };
             Data::set_item_of(item, "address_data", &address_data);
         }
