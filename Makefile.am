@@ -65,6 +65,8 @@ cdnskey_scanner_LDADD = \
 		$(LIBEVENT_LIBS) \
 		$(BOOST_SYSTEM_LIB)
 
+EXTRA_DIST = contrib/fedora/cdnskey-scanner.spec
+
 check: $(bin_PROGRAMS)
 	@./$(bin_PROGRAMS) 5 \
 --hostname_resolvers "172.20.20.253" \

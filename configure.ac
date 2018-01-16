@@ -16,8 +16,8 @@ AX_CHECK_COMPILE_FLAG([-std=c++14],
 AX_BOOST_BASE
 AX_BOOST_SYSTEM
 
-PKG_CHECK_MODULES(GETDNS, [getdns >= 1.3.0])
-PKG_CHECK_MODULES(GETDNSEXTRA, [getdns_ext_event >= 1.3.0])
+PKG_CHECK_MODULES(GETDNS, [getdns >= 1.2.1])
+PKG_CHECK_MODULES(GETDNSEXTRA, [getdns_ext_event >= 1.2.1])
 PKG_CHECK_MODULES(LIBEVENT, [libevent >= 2.0.0])
 
 AC_CHECK_FUNCS([clock_gettime],,[AC_MSG_ERROR([Function clock_gettime not found])])
@@ -57,7 +57,7 @@ AC_CHECK_HEADER([getdns/getdns_ext_libevent.h],,[AC_MSG_ERROR([Header getdns/get
 AC_CHECK_HEADER([getdns/getdns_extra.h],,[AC_MSG_ERROR([Header getdns/getdns_extra.h not found])])
 AC_CHECK_HEADER([getdns/getdns.h],,[AC_MSG_ERROR([Header getdns/getdns.h not found])])
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile contrib/fedora/cdnskey-scanner.spec])
 
 AC_OUTPUT
 
