@@ -26,6 +26,7 @@
 #include <sstream>
 
 #include <boost/variant.hpp>
+#include <boost/version.hpp>
 #include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
@@ -489,8 +490,20 @@ struct ValueIsOf:boost::static_visitor<bool>
     bool operator()(const X&)const { return false; }
 };
 
+#undef APPLY_BOOST_1_58_BUG_WORKAROUND
+#ifdef BOOST_VERSION
+#if (105800 <= BOOST_VERSION) && (BOOST_VERSION < 105900)
+//see https://svn.boost.org/trac10/ticket/11285
+#define APPLY_BOOST_1_58_BUG_WORKAROUND
+#endif
+#endif
+
 template <typename T>
+#ifdef APPLY_BOOST_1_58_BUG_WORKAROUND
 struct GetValueOf
+#else
+struct GetValueOf:boost::static_visitor<const T&>
+#endif
 {
     const T& operator()(const T& _value)const { return _value; }
     template <typename X>
