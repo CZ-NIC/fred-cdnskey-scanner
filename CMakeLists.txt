@@ -73,6 +73,8 @@ target_include_directories(cdnskey-scanner PUBLIC ${LIBEVENT_INCLUDE_DIRS})
 target_compile_options(cdnskey-scanner PUBLIC ${LIBEVENT_CXXFLAGS})
 target_link_libraries(cdnskey-scanner ${LIBEVENT_LIBRARIES})
 
+install(TARGETS cdnskey-scanner DESTINATION bin)
+
 enable_testing()
 add_test(NAME smoke
          COMMAND bash ${CMAKE_SOURCE_DIR}/test/smoke.sh ./cdnskey-scanner)
