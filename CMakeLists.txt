@@ -13,43 +13,41 @@ set(cdnskey-scanner_VERSION_MAJOR 1)
 set(cdnskey-scanner_VERSION_MINOR 0)
 set(cdnskey-scanner_VERSION_PATCH 2)
 
-add_executable(cdnskey-scanner src/main.cc)
-
-target_sources(cdnskey-scanner
-	PRIVATE src/main.cc
-	PRIVATE src/hostname_resolver.cc
-	PRIVATE src/insecure_cdnskey_resolver.cc
-	PRIVATE src/secure_cdnskey_resolver.cc
-	PRIVATE src/time_unit.cc
-	PRIVATE src/event/base.cc
-	PRIVATE src/getdns/error.cc
-	PRIVATE src/getdns/data.cc
-	PRIVATE src/getdns/context.cc
-	PRIVATE src/getdns/extensions.cc
-	PRIVATE src/getdns/rrtype.cc
-	PRIVATE src/getdns/solver.cc
-	PRIVATE src/util/pipe.cc
-	PRIVATE src/util/fork.cc
-	PRIVATE src/hostname_resolver.hh
-	PRIVATE src/time_unit.hh
-	PRIVATE src/getdns/transport.hh
-	PRIVATE src/getdns/data.hh
-	PRIVATE src/getdns/context.hh
-	PRIVATE src/getdns/extensions.hh
-	PRIVATE src/getdns/solver.hh
-	PRIVATE src/getdns/request.hh
-	PRIVATE src/getdns/error.hh
-	PRIVATE src/getdns/rrtype.hh
-	PRIVATE src/getdns/exception.hh
-	PRIVATE src/getdns/solver_fwd.hh
-	PRIVATE src/insecure_cdnskey_resolver.hh
-	PRIVATE src/secure_cdnskey_resolver.hh
-	PRIVATE src/hostname_resolver.hh
-	PRIVATE src/time_unit.hh
-	PRIVATE src/event/base.hh
-	PRIVATE src/util/fork.hh
-	PRIVATE src/util/pipe.hh
-	PRIVATE test/data.txt)
+add_executable(cdnskey-scanner src/main.cc
+	src/main.cc
+	src/hostname_resolver.cc
+	src/insecure_cdnskey_resolver.cc
+	src/secure_cdnskey_resolver.cc
+	src/time_unit.cc
+	src/event/base.cc
+	src/getdns/error.cc
+	src/getdns/data.cc
+	src/getdns/context.cc
+	src/getdns/extensions.cc
+	src/getdns/rrtype.cc
+	src/getdns/solver.cc
+	src/util/pipe.cc
+	src/util/fork.cc
+	src/hostname_resolver.hh
+	src/time_unit.hh
+	src/getdns/transport.hh
+	src/getdns/data.hh
+	src/getdns/context.hh
+	src/getdns/extensions.hh
+	src/getdns/solver.hh
+	src/getdns/request.hh
+	src/getdns/error.hh
+	src/getdns/rrtype.hh
+	src/getdns/exception.hh
+	src/getdns/solver_fwd.hh
+	src/insecure_cdnskey_resolver.hh
+	src/secure_cdnskey_resolver.hh
+	src/hostname_resolver.hh
+	src/time_unit.hh
+	src/event/base.hh
+	src/util/fork.hh
+	src/util/pipe.hh
+	test/data.txt)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -std=c++14 -ggdb -Wall -Wextra -fdiagnostics-color=auto")
 
