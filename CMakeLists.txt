@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 2.8)
 
 # CentOS 7 contains cmake 2.8.12 and boost 1.53.0 (these are _not_ in the devtoolset)
 
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+endif()
+
 project(cdnskey-scanner CXX)
 
 set(cdnskey-scanner_VERSION_MAJOR 1)
