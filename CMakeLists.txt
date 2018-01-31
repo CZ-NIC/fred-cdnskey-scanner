@@ -14,7 +14,6 @@ set(cdnskey-scanner_VERSION_MINOR 0)
 set(cdnskey-scanner_VERSION_PATCH 2)
 
 add_executable(cdnskey-scanner src/main.cc
-	src/main.cc
 	src/hostname_resolver.cc
 	src/insecure_cdnskey_resolver.cc
 	src/secure_cdnskey_resolver.cc
@@ -73,3 +72,9 @@ pkg_search_module(LIBEVENT REQUIRED libevent>=2.0.0)
 target_include_directories(cdnskey-scanner PUBLIC ${LIBEVENT_INCLUDE_DIRS})
 target_compile_options(cdnskey-scanner PUBLIC ${LIBEVENT_CXXFLAGS})
 target_link_libraries(cdnskey-scanner ${LIBEVENT_LIBRARIES})
+
+enable_testing()
+add_test(NAME smoke
+         COMMAND bash ${CMAKE_SOURCE_DIR}/test/smoke.sh ./cdnskey-scanner)
+
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --verbose)
