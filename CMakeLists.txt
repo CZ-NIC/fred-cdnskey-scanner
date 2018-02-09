@@ -9,9 +9,12 @@ endif()
 
 project(cdnskey-scanner CXX)
 
-set(cdnskey-scanner_VERSION_MAJOR 1)
-set(cdnskey-scanner_VERSION_MINOR 0)
-set(cdnskey-scanner_VERSION_PATCH 2)
+if(NOT VERSION)
+    execute_process(COMMAND "git" "describe"
+                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                    OUTPUT_VARIABLE RAWVERSION)
+    string(REGEX REPLACE "-.*\n" "" VERSION ${RAWVERSION})
+endif()
 
 add_executable(cdnskey-scanner src/main.cc
 	src/hostname_resolver.cc
@@ -50,7 +53,7 @@ add_executable(cdnskey-scanner src/main.cc
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -std=c++14 -ggdb -Wall -Wextra -fdiagnostics-color=auto")
 
-include_directories("." PRIVATE)
+include_directories("${CMAKE_SOURCE_DIR}" PRIVATE)
 
 find_package(Boost 1.53.0 COMPONENTS system REQUIRED)
 target_link_libraries(cdnskey-scanner ${Boost_SYSTEM_LIBRARY})
@@ -80,3 +83,10 @@ add_test(NAME smoke
          COMMAND bash ${CMAKE_SOURCE_DIR}/test/smoke.sh ./cdnskey-scanner)
 
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --verbose)
+
+SET(CPACK_SOURCE_GENERATOR "TGZ")
+set(CPACK_PACKAGE_VERSION ${VERSION})
+set(CPACK_SOURCE_IGNORE_FILES "_CPack_Packages;CMakeCache;CPack*;cmake_install.cmake;CMakeFiles;CTestTestfile*;.git*")
+SET(CPACK_SOURCE_PACKAGE_FILE_NAME "cdnskey-scanner-${VERSION}")
+include(CPack)
+add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source)
