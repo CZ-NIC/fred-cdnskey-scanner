@@ -10,7 +10,7 @@ endif()
 project(cdnskey-scanner CXX)
 
 if(NOT VERSION)
-    execute_process(COMMAND "git" "describe"
+    execute_process(COMMAND "git" "describe" "--tags"
                     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
                     OUTPUT_VARIABLE RAWVERSION)
     string(REGEX REPLACE "-.*\n" "" VERSION ${RAWVERSION})
