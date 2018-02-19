@@ -26,6 +26,7 @@ Automated Keyset Management
 %build
 %if 0%{?centos}
 %{?scl:scl enable devtoolset-7 llvm-toolset-7 - << \EOF}
+%global __cmake /opt/rh/llvm-toolset-7/root/usr/bin/cmake
 %endif
 %cmake -DVERSION=%{version} .
 %make_build
@@ -37,7 +38,13 @@ Automated Keyset Management
 %make_install
 
 %check
+%if 0%{?centos}
+%{?scl:scl enable llvm-toolset-7 - << \EOF}
+%endif
 ctest -V %{?_smp_mflags}
+%if 0%{?centos}
+%{?scl:EOF}
+%endif
 
 %clean
 rm -rf $RPM_BUILD_ROOT
