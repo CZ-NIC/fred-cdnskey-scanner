@@ -1,6 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
-
-# CentOS 7 contains cmake 2.8.12 and boost 1.53.0 (these are _not_ in the devtoolset)
+cmake_minimum_required(VERSION 3.5)
 
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
@@ -16,42 +14,57 @@ if(NOT VERSION)
     string(REGEX REPLACE "-.*\n" "" VERSION ${RAWVERSION})
 endif()
 
-add_executable(cdnskey-scanner src/main.cc
-	src/hostname_resolver.cc
-	src/insecure_cdnskey_resolver.cc
-	src/secure_cdnskey_resolver.cc
-	src/time_unit.cc
-	src/event/base.cc
-	src/getdns/error.cc
-	src/getdns/data.cc
-	src/getdns/context.cc
-	src/getdns/extensions.cc
-	src/getdns/rrtype.cc
-	src/getdns/solver.cc
-	src/util/pipe.cc
-	src/util/fork.cc
-	src/hostname_resolver.hh
-	src/time_unit.hh
-	src/getdns/transport.hh
-	src/getdns/data.hh
-	src/getdns/context.hh
-	src/getdns/extensions.hh
-	src/getdns/solver.hh
-	src/getdns/request.hh
-	src/getdns/error.hh
-	src/getdns/rrtype.hh
-	src/getdns/exception.hh
-	src/getdns/solver_fwd.hh
-	src/insecure_cdnskey_resolver.hh
-	src/secure_cdnskey_resolver.hh
-	src/hostname_resolver.hh
-	src/time_unit.hh
-	src/event/base.hh
-	src/util/fork.hh
-	src/util/pipe.hh
-	test/data.txt)
+add_executable(cdnskey-scanner src/main.cc)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -std=c++14 -ggdb -Wall -Wextra -fdiagnostics-color=auto")
+target_sources(cdnskey-scanner
+    PRIVATE src/main.cc
+    PRIVATE src/hostname_resolver.cc
+    PRIVATE src/insecure_cdnskey_resolver.cc
+    PRIVATE src/secure_cdnskey_resolver.cc
+    PRIVATE src/time_unit.cc
+    PRIVATE src/event/base.cc
+    PRIVATE src/getdns/error.cc
+    PRIVATE src/getdns/data.cc
+    PRIVATE src/getdns/context.cc
+    PRIVATE src/getdns/extensions.cc
+    PRIVATE src/getdns/rrtype.cc
+    PRIVATE src/getdns/solver.cc
+    PRIVATE src/util/pipe.cc
+    PRIVATE src/util/fork.cc
+    PRIVATE src/hostname_resolver.hh
+    PRIVATE src/time_unit.hh
+    PRIVATE src/getdns/transport.hh
+    PRIVATE src/getdns/data.hh
+    PRIVATE src/getdns/context.hh
+    PRIVATE src/getdns/extensions.hh
+    PRIVATE src/getdns/solver.hh
+    PRIVATE src/getdns/request.hh
+    PRIVATE src/getdns/error.hh
+    PRIVATE src/getdns/rrtype.hh
+    PRIVATE src/getdns/exception.hh
+    PRIVATE src/getdns/solver_fwd.hh
+    PRIVATE src/insecure_cdnskey_resolver.hh
+    PRIVATE src/secure_cdnskey_resolver.hh
+    PRIVATE src/hostname_resolver.hh
+    PRIVATE src/time_unit.hh
+    PRIVATE src/event/base.hh
+    PRIVATE src/util/fork.hh
+    PRIVATE src/util/pipe.hh
+    PRIVATE test/data.txt)
+
+set_target_properties(cdnskey-scanner PROPERTIES
+    CXX_STANDARD 14
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO
+)
+
+target_compile_options(cdnskey-scanner
+    PRIVATE -O2
+    PRIVATE -ggdb
+    PRIVATE -Wall
+    PRIVATE -Wextra
+    PRIVATE -fdiagnostics-color=auto
+)
 
 include_directories("${CMAKE_SOURCE_DIR}" PRIVATE)
 
@@ -75,6 +88,67 @@ pkg_search_module(LIBEVENT REQUIRED libevent>=2.0.0)
 target_include_directories(cdnskey-scanner PUBLIC ${LIBEVENT_INCLUDE_DIRS})
 target_compile_options(cdnskey-scanner PUBLIC ${LIBEVENT_CXXFLAGS})
 target_link_libraries(cdnskey-scanner ${LIBEVENT_LIBRARIES})
+
+include(CheckIncludeFileCXX)
+
+set(CMAKE_REQUIRED_FLAGS "${Boost_SYSTEM_LIBRARY}")
+
+function(abort_if_headers_not_found)
+    foreach(header_name ${ARGN})
+        check_include_file_cxx(${header_name} FOUND${header_name})
+        if(NOT FOUND${header_name})
+            message(FATAL_ERROR "Header ${header_name} not found!")
+        endif()
+    endforeach()
+endfunction()
+
+abort_if_headers_not_found(
+    fcntl.h
+    sys/time.h
+    sys/stat.h
+    sys/resource.h
+    sys/types.h
+    sys/wait.h
+    event2/event.h
+    getdns/getdns_ext_libevent.h
+    getdns/getdns_extra.h
+    getdns/getdns.h
+    boost/archive/iterators/base64_from_binary.hpp
+    boost/archive/iterators/binary_from_base64.hpp
+    boost/archive/iterators/ostream_iterator.hpp
+    boost/archive/iterators/transform_width.hpp
+    boost/algorithm/string/classification.hpp
+    boost/algorithm/string.hpp
+    boost/algorithm/string/predicate.hpp
+    boost/algorithm/string/split.hpp
+    boost/asio/ip/address.hpp
+    boost/lexical_cast.hpp
+    boost/optional.hpp
+    boost/variant.hpp
+    boost/variant/variant.hpp
+)
+
+include(CheckFunctionExists)
+function(abort_if_functions_not_found function_name)
+    foreach(function_name ${ARGN})
+        check_function_exists(${function_name} FOUND${function_name})
+        if(NOT FOUND${function_name})
+            message(FATAL_ERROR "Function ${function_name} not found!")
+        endif()
+    endforeach()
+endfunction()
+
+abort_if_functions_not_found(
+    clock_gettime
+    dup2
+    dup2
+    strerror
+    read
+    close
+    fork
+    waitpid
+    kill
+)
 
 install(TARGETS cdnskey-scanner DESTINATION bin)
 
