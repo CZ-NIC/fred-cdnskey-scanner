@@ -142,7 +142,6 @@ endfunction()
 abort_if_functions_not_found(
     clock_gettime
     dup2
-    dup2
     strerror
     read
     close
