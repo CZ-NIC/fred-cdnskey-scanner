@@ -5,7 +5,8 @@ if(CCACHE_PROGRAM)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
 endif()
 
-project(cdnskey-scanner CXX)
+set(program_name cdnskey-scanner)
+project(${program_name} CXX)
 
 if(NOT VERSION)
     execute_process(COMMAND "git" "describe" "--tags"
@@ -14,9 +15,9 @@ if(NOT VERSION)
     string(REGEX REPLACE "-.*\n" "" VERSION ${RAWVERSION})
 endif()
 
-add_executable(cdnskey-scanner src/main.cc)
+add_executable(${program_name} src/main.cc)
 
-target_sources(cdnskey-scanner
+target_sources(${program_name}
     PRIVATE src/main.cc
     PRIVATE src/hostname_resolver.cc
     PRIVATE src/insecure_cdnskey_resolver.cc
@@ -52,13 +53,13 @@ target_sources(cdnskey-scanner
     PRIVATE src/util/pipe.hh
     PRIVATE test/data.txt)
 
-set_target_properties(cdnskey-scanner PROPERTIES
+set_target_properties(${program_name} PROPERTIES
     CXX_STANDARD 14
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
 )
 
-target_compile_options(cdnskey-scanner
+target_compile_options(${program_name}
     PRIVATE -O2
     PRIVATE -ggdb
     PRIVATE -Wall
@@ -69,25 +70,25 @@ target_compile_options(cdnskey-scanner
 include_directories("${CMAKE_SOURCE_DIR}" PRIVATE)
 
 find_package(Boost 1.53.0 COMPONENTS system REQUIRED)
-target_link_libraries(cdnskey-scanner ${Boost_SYSTEM_LIBRARY})
-target_include_directories(cdnskey-scanner PUBLIC ${Boost_INCLUDE_DIRS})
+target_link_libraries(${program_name} ${Boost_SYSTEM_LIBRARY})
+target_include_directories(${program_name} PUBLIC ${Boost_INCLUDE_DIRS})
 
 find_package(PkgConfig REQUIRED)
 
 pkg_search_module(GETDNS REQUIRED getdns>=1.2.1)
-target_include_directories(cdnskey-scanner PUBLIC ${GETDNS_INCLUDE_DIRS})
-target_compile_options(cdnskey-scanner PUBLIC ${GETDNS_CXXFLAGS})
-target_link_libraries(cdnskey-scanner ${GETDNS_LIBRARIES})
+target_include_directories(${program_name} PUBLIC ${GETDNS_INCLUDE_DIRS})
+target_compile_options(${program_name} PUBLIC ${GETDNS_CXXFLAGS})
+target_link_libraries(${program_name} ${GETDNS_LIBRARIES})
 
 pkg_search_module(GETDNSEXTRA REQUIRED getdns_ext_event>=1.2.1)
-target_include_directories(cdnskey-scanner PUBLIC ${GETDNSEXTRA_INCLUDE_DIRS})
-target_compile_options(cdnskey-scanner PUBLIC ${GETDNSEXTRA_CXXFLAGS})
-target_link_libraries(cdnskey-scanner ${GETDNSEXTRA_LIBRARIES})
+target_include_directories(${program_name} PUBLIC ${GETDNSEXTRA_INCLUDE_DIRS})
+target_compile_options(${program_name} PUBLIC ${GETDNSEXTRA_CXXFLAGS})
+target_link_libraries(${program_name} ${GETDNSEXTRA_LIBRARIES})
 
 pkg_search_module(LIBEVENT REQUIRED libevent>=2.0.0)
-target_include_directories(cdnskey-scanner PUBLIC ${LIBEVENT_INCLUDE_DIRS})
-target_compile_options(cdnskey-scanner PUBLIC ${LIBEVENT_CXXFLAGS})
-target_link_libraries(cdnskey-scanner ${LIBEVENT_LIBRARIES})
+target_include_directories(${program_name} PUBLIC ${LIBEVENT_INCLUDE_DIRS})
+target_compile_options(${program_name} PUBLIC ${LIBEVENT_CXXFLAGS})
+target_link_libraries(${program_name} ${LIBEVENT_LIBRARIES})
 
 include(CheckIncludeFileCXX)
 
@@ -150,17 +151,17 @@ abort_if_functions_not_found(
     kill
 )
 
-install(TARGETS cdnskey-scanner DESTINATION bin)
+install(TARGETS ${program_name} DESTINATION bin)
 
 enable_testing()
 add_test(NAME smoke
-         COMMAND bash ${CMAKE_SOURCE_DIR}/test/smoke.sh ./cdnskey-scanner)
+         COMMAND bash ${CMAKE_SOURCE_DIR}/test/smoke.sh ./${program_name})
 
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --verbose)
 
 SET(CPACK_SOURCE_GENERATOR "TGZ")
 set(CPACK_PACKAGE_VERSION ${VERSION})
 set(CPACK_SOURCE_IGNORE_FILES "_CPack_Packages;CMakeCache;CPack*;cmake_install.cmake;CMakeFiles;CTestTestfile*;.git*")
-SET(CPACK_SOURCE_PACKAGE_FILE_NAME "cdnskey-scanner-${VERSION}")
+SET(CPACK_SOURCE_PACKAGE_FILE_NAME "${program_name}-${VERSION}")
 include(CPack)
 add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source)
