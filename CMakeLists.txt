@@ -92,8 +92,6 @@ target_link_libraries(${program_name} ${LIBEVENT_LIBRARIES})
 
 include(CheckIncludeFileCXX)
 
-set(CMAKE_REQUIRED_FLAGS "${Boost_SYSTEM_LIBRARY}")
-
 function(abort_if_headers_not_found)
     foreach(header_name ${ARGN})
         check_include_file_cxx(${header_name} FOUND${header_name})
@@ -122,7 +120,7 @@ abort_if_headers_not_found(
     boost/algorithm/string.hpp
     boost/algorithm/string/predicate.hpp
     boost/algorithm/string/split.hpp
-    boost/asio/ip/address.hpp
+    #boost/asio/ip/address.hpp
     boost/lexical_cast.hpp
     boost/optional.hpp
     boost/variant.hpp
