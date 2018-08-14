@@ -1,5 +1,14 @@
 cmake_minimum_required(VERSION 3.5)
 
+macro(assert_binary_in_path name binary)
+    find_program(${name} ${binary})
+    if(NOT ${name})
+        message(FATAL_ERROR "${binary} not found!")
+    endif()
+endmacro()
+
+assert_binary_in_path(GIT_PROGRAM git)
+
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
@@ -7,6 +16,15 @@ endif()
 
 set(program_name cdnskey-scanner)
 project(${program_name} CXX)
+
+macro(set_default variable_name variable_value)
+    if(NOT ${variable_name})
+        set(${variable_name} ${variable_value})
+    endif()
+endmacro()
+
+set_default(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set_default(TARBALL_FILE_NAME fred-cdnskey-scanner)
 
 if(NOT VERSION)
     execute_process(COMMAND "git" "describe" "--tags"
@@ -149,6 +167,7 @@ abort_if_functions_not_found(
 )
 
 install(TARGETS ${program_name} DESTINATION bin)
+add_custom_target(uninstall COMMAND rm ${CMAKE_INSTALL_PREFIX}/bin/${program_name})
 
 enable_testing()
 add_test(NAME smoke
@@ -156,9 +175,51 @@ add_test(NAME smoke
 
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --verbose)
 
-SET(CPACK_SOURCE_GENERATOR "TGZ")
-set(CPACK_PACKAGE_VERSION ${VERSION})
-set(CPACK_SOURCE_IGNORE_FILES "_CPack_Packages;CMakeCache;CPack*;cmake_install.cmake;CMakeFiles;CTestTestfile*;.git*")
-SET(CPACK_SOURCE_PACKAGE_FILE_NAME "${program_name}-${VERSION}")
-include(CPack)
-add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source)
+
+if(EXISTS ${CMAKE_SOURCE_DIR}/.git AND GIT_PROGRAM)
+    if(NOT TARGET dist)
+        add_custom_target(dist
+            COMMAND ${GIT_PROGRAM} archive --format=tar --prefix=${TARBALL_FILE_NAME}/ HEAD | gzip > ${CMAKE_BINARY_DIR}/${TARBALL_FILE_NAME}.tar.gz
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    endif()
+
+    if(NOT TARGET distcheck)
+        set(DISTCHECK_BUILD_DIR "_build")
+        set(DISTCHECK_INSTALL_DIR "_inst")
+        if(${CMAKE_GENERATOR} STREQUAL "Ninja")
+            set(DISTCHECK_BUILD_CMD "ninja")
+            set(DISTCHECK_MAKEFLAGS "")
+        else()
+            set(DISTCHECK_BUILD_CMD "make")
+            execute_process(COMMAND "grep" "-c" "model name" "/proc/cpuinfo"
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                OUTPUT_VARIABLE NOCPUS)
+            string(REGEX REPLACE "\n" "" NOCPUS ${NOCPUS})
+            set(DISTCHECK_MAKEFLAGS "MAKEFLAGS=-j${NOCPUS}")
+        endif()
+        add_custom_target(distcheck
+            COMMAND
+            rm -rf ${DISTCHECK_BUILD_DIR} ${DISTCHECK_INSTALL_DIR} ${TARBALL_FILE_NAME}
+            && mkdir ${DISTCHECK_BUILD_DIR} ${DISTCHECK_INSTALL_DIR}
+            && (tar xzf ${TARBALL_FILE_NAME}.tar.gz
+                || (echo 'Error: failed to unpack the archive' 2>&1\; false))
+            && (cd ${DISTCHECK_BUILD_DIR}
+                && (cmake -G${CMAKE_GENERATOR} -DCMAKE_INSTALL_PREFIX=../${DISTCHECK_INSTALL_DIR} ../${TARBALL_FILE_NAME}
+                    || (echo 'Error: failed to configure the archive' 2>&1\; false))
+                && (${DISTCHECK_MAKEFLAGS} ${DISTCHECK_BUILD_CMD}
+                    || (echo 'Error: the build target failed ' 2>&1\; false))
+                && (${DISTCHECK_BUILD_CMD} install
+                    || (echo 'Error: the install target failed' 2>&1\; false))
+                && (${DISTCHECK_BUILD_CMD} uninstall
+                    || (echo 'Error: the uninstall target failed' 2>&1\; false))
+                && (${DISTCHECK_BUILD_CMD} clean
+                    || (echo 'Error: the clean target failed' 2>&1\; false)))
+            && rm -rf ${DISTCHECK_BUILD_DIR} ${DISTCHECK_INSTALL_DIR} ${TARBALL_FILE_NAME}
+            && echo 'PASS: ' ${TARBALL_FILE_NAME}.tar.gz 'is ready for distribution.'
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Checking the distribution archive...")
+        add_dependencies(distcheck dist)
+    endif()
+else()
+    message(STATUS "no git -- not including dist and distcheck targets")
+endif()
