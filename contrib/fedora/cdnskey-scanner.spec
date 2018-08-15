@@ -7,7 +7,7 @@ License:	GPL
 URL:		http://fred.nic.cz
 Source0:      %{name}-%{version}.tar.gz
 BuildRoot:    %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-BuildRequires:  gcc-c++, getdns-devel >= 1.2.1, libevent-devel, boost-devel, boost-system
+BuildRequires:  git, gcc-c++, getdns-devel >= 1.2.1, libevent-devel, boost-devel, boost-system
 %if 0%{?centos}
 BuildRequires: centos-release-scl, devtoolset-7, devtoolset-7-build, llvm-toolset-7-cmake, llvm-toolset-7-build
 %else

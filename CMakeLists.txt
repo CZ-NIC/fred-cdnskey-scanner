@@ -1,13 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 
-macro(assert_binary_in_path name binary)
-    find_program(${name} ${binary})
-    if(NOT ${name})
-        message(FATAL_ERROR "${binary} not found!")
-    endif()
-endmacro()
-
-assert_binary_in_path(GIT_PROGRAM git)
+find_program(GIT_PROGRAM git)
 
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
