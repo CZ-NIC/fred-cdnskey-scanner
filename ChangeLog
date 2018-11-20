@@ -7,10 +7,13 @@
   * AUTHORS file update
 
 2018-01-03 (1.1.0)
+
   * Compiled using C++14 standard
 
 2017-11-27 (1.0.1)
+
   * Fix responses with null-byte terminated public keys
 
 2017-08-28 (1.0.0)
+
   * Initial release
