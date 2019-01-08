@@ -23,7 +23,7 @@ if(NOT VERSION)
     execute_process(COMMAND "git" "describe" "--tags"
                     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
                     OUTPUT_VARIABLE RAWVERSION)
-    string(REGEX REPLACE "-.*\n" "" VERSION ${RAWVERSION})
+    string(REGEX REPLACE "(-.*)?\n" "" VERSION "${RAWVERSION}")
 endif()
 
 add_executable(${program_name} src/main.cc)
