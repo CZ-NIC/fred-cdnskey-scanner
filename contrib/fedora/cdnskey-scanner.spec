@@ -28,7 +28,7 @@ Automated Keyset Management
 %{?scl:scl enable devtoolset-7 llvm-toolset-7 - << \EOF}
 %global __cmake /opt/rh/llvm-toolset-7/root/usr/bin/cmake
 %endif
-%cmake -DVERSION=%{version} .
+%cmake -DVERSION=%{version} -DCMAKE_INSTALL_PREFIX=/ -DUSE_USR_PREFIX=1 .
 %make_build
 %if 0%{?centos}
 %{?scl:EOF}
