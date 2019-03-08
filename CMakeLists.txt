@@ -16,8 +16,35 @@ macro(set_default variable_name variable_value)
     endif()
 endmacro()
 
+macro(normalize_path variable_name variable_value)
+    string(REGEX REPLACE "//*" "/" "${variable_name}" "${variable_value}")
+    if(NOT "x${${variable_name}}" STREQUAL "x/")
+        string(REGEX REPLACE "/$" "" "${variable_name}" "${${variable_name}}")
+    endif()
+endmacro()
+
+macro(set_default_path variable_name variable_value)
+    if(NOT ${variable_name})
+        normalize_path(${variable_name} ${variable_value})
+    endif()
+endmacro()
+
+normalize_path(NORMALIZED_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
+if("x${NORMALIZED_INSTALL_PREFIX}" STREQUAL "x/usr/local")
+    set(USR_PREFIX "")
+    set(USR_SHARE_PREFIX "")
+else()
+    set(USR_SHARE_PREFIX "/usr")
+    if(USE_USR_PREFIX)
+        set(USR_PREFIX "/usr")
+    else()
+        set(USR_PREFIX "")
+    endif()
+endif()
+
 set_default(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set_default(TARBALL_FILE_NAME fred-cdnskey-scanner)
+set_default_path(BINDIR ${CMAKE_INSTALL_PREFIX}/${USR_PREFIX}/bin)
 
 if(NOT VERSION)
     execute_process(COMMAND "git" "describe" "--tags"
@@ -159,8 +186,8 @@ abort_if_functions_not_found(
     kill
 )
 
-install(TARGETS ${program_name} DESTINATION bin)
-add_custom_target(uninstall COMMAND rm ${CMAKE_INSTALL_PREFIX}/bin/${program_name})
+install(TARGETS ${program_name} DESTINATION ${BINDIR})
+add_custom_target(uninstall COMMAND rm ${BINDIR}/${program_name})
 
 enable_testing()
 add_test(NAME smoke
