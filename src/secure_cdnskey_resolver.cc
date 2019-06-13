@@ -368,7 +368,7 @@ private:
     {
         const struct ::timespec now = TimeUnit::get_clock_monotonic();
         const TimeUnit::Nanoseconds remaining_time_nsec = time_end_ - now;
-        const std::uint64_t min_timeout_usec = 4000;//smaller value exhausts file descriptors :-(
+        const std::uint64_t min_timeout_usec = 10000;//smaller value exhausts file descriptors :-(
         if (remaining_time_nsec.value <= 0)
         {
             this->Event::Timeout::set(min_timeout_usec);
