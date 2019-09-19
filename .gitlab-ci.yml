@@ -23,8 +23,44 @@ docker:cdnskey-scanner:ubuntu:
     IMAGE_NAME: ubuntu:16.04
     IMAGE_TAG: $CI_REGISTRY_IMAGE/$IMAGE_NAME
 
+docker:cdnskey-scanner:fedora29:
+  <<: *image
+  variables:
+    IMAGE_NAME: fedora:29
+    IMAGE_TAG: $CI_REGISTRY_IMAGE/$IMAGE_NAME
+  only:
+    - master
+    - triggers
+    - schedules
+    - web
+
+docker:cdnskey-scanner:fedora30:
+  <<: *image
+  variables:
+    IMAGE_NAME: fedora:30
+    IMAGE_TAG: $CI_REGISTRY_IMAGE/$IMAGE_NAME
+  only:
+    - master
+    - triggers
+    - schedules
+    - web
+
 .ubuntu_16_04: &ubuntu_16_04
   image: "$CI_REGISTRY/fred/cdnskey-scanner/ubuntu:16.04"
+  tags:
+    - amd64
+    - builder
+    - linux
+
+.fedora_29: &fedora_29
+  image: "$CI_REGISTRY/fred/cdnskey-scanner/fedora:29"
+  tags:
+    - amd64
+    - builder
+    - linux
+
+.fedora_30: &fedora_30
+  image: "$CI_REGISTRY/fred/cdnskey-scanner/fedora:30"
   tags:
     - amd64
     - builder
@@ -53,3 +89,29 @@ build:ubuntu:amd64:
     - echo "\$PWD=$PWD"
     - cmake .
     - make -j $(($(grep -c processor /proc/cpuinfo) / 2 + 1)) distcheck
+
+build:fedora29:amd64:
+  <<: *fedora_29
+  stage: build
+  script:
+    - echo "\$PWD=$PWD"
+    - cmake .
+    - make -j $(($(grep -c processor /proc/cpuinfo) / 2 + 1)) distcheck
+  only:
+    - master
+    - triggers
+    - schedules
+    - web
+
+build:fedora30:amd64:
+  <<: *fedora_30
+  stage: build
+  script:
+    - echo "\$PWD=$PWD"
+    - cmake .
+    - make -j $(($(grep -c processor /proc/cpuinfo) / 2 + 1)) distcheck
+  only:
+    - master
+    - triggers
+    - schedules
+    - web
