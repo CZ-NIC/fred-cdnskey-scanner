@@ -45,6 +45,17 @@ docker:cdnskey-scanner:fedora30:
     - schedules
     - web
 
+docker:cdnskey-scanner:centos:
+  <<: *image
+  variables:
+    IMAGE_NAME: centos:7
+    IMAGE_TAG: $CI_REGISTRY_IMAGE/$IMAGE_NAME
+  only:
+    - master
+    - triggers
+    - schedules
+    - web
+
 .ubuntu_16_04: &ubuntu_16_04
   image: "$CI_REGISTRY/fred/cdnskey-scanner/ubuntu:16.04"
   tags:
@@ -61,6 +72,13 @@ docker:cdnskey-scanner:fedora30:
 
 .fedora_30: &fedora_30
   image: "$CI_REGISTRY/fred/cdnskey-scanner/fedora:30"
+  tags:
+    - amd64
+    - builder
+    - linux
+
+.centos_7: &centos_7
+  image: "$CI_REGISTRY/fred/cdnskey-scanner/centos:7"
   tags:
     - amd64
     - builder
@@ -109,6 +127,19 @@ build:fedora30:amd64:
   script:
     - echo "\$PWD=$PWD"
     - cmake .
+    - make -j $(($(grep -c processor /proc/cpuinfo) / 2 + 1)) distcheck
+  only:
+    - master
+    - triggers
+    - schedules
+    - web
+
+build:centos:amd64:
+  <<: *centos_7
+  stage: build
+  script:
+    - echo "\$PWD=$PWD"
+    - cmake3 .
     - make -j $(($(grep -c processor /proc/cpuinfo) / 2 + 1)) distcheck
   only:
     - master
