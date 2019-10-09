@@ -8,7 +8,7 @@ URL:		http://fred.nic.cz
 Source0:      %{name}-%{version}.tar.gz
 BuildRoot:    %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildRequires:  git, gcc-c++, getdns-devel >= 1.2.1, libevent-devel, boost-devel, boost-system
-%if 0%{?centos}
+%if 0%{?el7}
 BuildRequires: centos-release-scl, devtoolset-7, devtoolset-7-build, llvm-toolset-7-cmake, llvm-toolset-7-build
 %else
 BuildRequires: cmake
@@ -24,13 +24,13 @@ Automated Keyset Management
 %setup -q
 
 %build
-%if 0%{?centos}
+%if 0%{?el7}
 %{?scl:scl enable devtoolset-7 llvm-toolset-7 - << \EOF}
 %global __cmake /opt/rh/llvm-toolset-7/root/usr/bin/cmake
 %endif
 %cmake -DVERSION=%{version} -DCMAKE_INSTALL_PREFIX=/ -DUSE_USR_PREFIX=1 .
 %make_build
-%if 0%{?centos}
+%if 0%{?el7}
 %{?scl:EOF}
 %endif
 
@@ -38,11 +38,11 @@ Automated Keyset Management
 %make_install
 
 %check
-%if 0%{?centos}
+%if 0%{?el7}
 %{?scl:scl enable llvm-toolset-7 - << \EOF}
 %endif
 ctest -V %{?_smp_mflags}
-%if 0%{?centos}
+%if 0%{?el7}
 %{?scl:EOF}
 %endif
 
