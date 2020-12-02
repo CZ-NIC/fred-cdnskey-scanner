@@ -29,13 +29,21 @@ Automated Keyset Management
 %global __cmake /opt/rh/llvm-toolset-7/root/usr/bin/cmake
 %endif
 %cmake -DVERSION=%{version} -DCMAKE_INSTALL_PREFIX=/ -DUSE_USR_PREFIX=1 .
+%if 0%{?el7}
 %make_build
+%else
+%cmake_build
+%endif
 %if 0%{?el7}
 %{?scl:EOF}
 %endif
 
 %install
+%if 0%{?el7}
 %make_install
+%else
+%cmake_install
+%endif
 
 %check
 %if 0%{?el7}
