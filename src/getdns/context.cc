@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2018  CZ.NIC, z. s. p. o.
+ * Copyright (C) 2017-2021  CZ.NIC, z. s. p. o.
  *
  * This file is part of FRED.
  *
@@ -16,304 +16,127 @@
  * You should have received a copy of the GNU General Public License
  * along with FRED.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 #include "src/getdns/context.hh"
 #include "src/getdns/data.hh"
-#include "src/getdns/error.hh"
 #include "src/getdns/exception.hh"
 
 #include <getdns/getdns_ext_libevent.h>
 
 #include <algorithm>
 #include <array>
+#include <type_traits>
 #include <vector>
 
 namespace GetDns {
 
+Context::Context(Context&& src)
+    : ptr_{nullptr}
+{
+    std::swap(src.ptr_, ptr_);
+}
+
+Context& Context::operator=(Context&& src)
+{
+    std::swap(src.ptr_, ptr_);
+    return *this;
+}
+
 namespace {
 
-::getdns_context* create_context(Context::InitialSettings initial_settings)
+::getdns_context* create_context(int set_from_os)
 {
     ::getdns_context* context_ptr = nullptr;
-    const auto retval = ::getdns_context_create(
-            &context_ptr,
-            initial_settings == Context::InitialSettings::from_os ? 1 : 0);
-    if (retval == ::GETDNS_RETURN_GOOD)
-    {
-        return context_ptr;
-    }
-    struct ContextCreateException:Error
-    {
-        ContextCreateException(::getdns_return_t _error_code, const char* _file, int _line)
-            : Error(_error_code, _file, _line)
-        { }
-    };
-    throw ContextCreateException(retval, __FILE__, __LINE__);
+    MUST_BE_GOOD(::getdns_context_create(&context_ptr, set_from_os));
+    return context_ptr;
 }
 
 }//namespace GetDns::{anonymous}
 
-Context::Context(Event::Base& _event_base, InitialSettings _initial_settings)
-    : context_ptr_(create_context(_initial_settings))
-{
-    const auto retval = ::getdns_extension_set_libevent_base(context_ptr_.get(), _event_base.get_base());
-    if (retval != ::GETDNS_RETURN_GOOD)
-    {
-        struct SetEventBaseException:Error
-        {
-            SetEventBaseException(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw SetEventBaseException(retval, __FILE__, __LINE__);
-    }
-}
+Context::Context(InitialSettings::FromOs)
+    : Context{create_context(1)}
+{ }
+
+Context::Context(InitialSettings::None)
+    : Context{create_context(0)}
+{ }
+
+Context::Context(::getdns_context* ptr)
+    : ptr_{ptr}
+{ }
 
 Context::~Context()
 {
+    ::getdns_context_destroy(ptr_);
+    ptr_ = nullptr;
 }
 
-::getdns_transaction_t Context::add_request_for_address_resolving(
-        const std::string& _hostname,
-        void* _user_data_ptr,
-        ::getdns_callback_t _on_event,
-        Extensions _extensions)
+Context& Context::set_dns_transport_list(std::size_t count, ::getdns_transport_list_t* transports)
 {
-    Data::Dict extensions = _extensions.into_dictionary();
-    ::getdns_transaction_t transaction_id;
-    const auto retval = ::getdns_address(
-            context_ptr_.get(),
-            _hostname.c_str(),
-            extensions.get_base_ptr(),
-            _user_data_ptr,
-            &transaction_id,
-            _on_event);
-    if (retval == ::GETDNS_RETURN_GOOD)
-    {
-        return transaction_id;
-    }
-    struct AddressException:Error
-    {
-        AddressException(::getdns_return_t _error_code, const char* _file, int _line)
-            : Error(_error_code, _file, _line)
-        { }
-    };
-    throw AddressException(retval, __FILE__, __LINE__);
+    MUST_BE_GOOD(::getdns_context_set_dns_transport_list(ptr_, count, transports));
+    return *this;
 }
 
-::getdns_transaction_t Context::add_request_for_cdnskey_resolving(
-        const std::string& _domain,
-        void* _user_data_ptr,
-        ::getdns_callback_t _on_event,
-        Extensions _extensions)
+Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip::address>& servers)
 {
-    Data::Dict extensions = _extensions.into_dictionary();
-    ::getdns_transaction_t transaction_id;
-    const auto retval = ::getdns_general(
-            context_ptr_.get(),
-            _domain.c_str(),
-            GETDNS_RRTYPE_CDNSKEY,
-            extensions.get_base_ptr(),
-            _user_data_ptr,
-            &transaction_id,
-            _on_event);
-    if (retval == ::GETDNS_RETURN_GOOD)
+    if (!servers.empty())
     {
-        return transaction_id;
-    }
-    struct AddressException:Error
-    {
-        AddressException(::getdns_return_t _error_code, const char* _file, int _line)
-            : Error(_error_code, _file, _line)
-        { }
-    };
-    throw AddressException(retval, __FILE__, __LINE__);
-}
-
-Context& Context::set_dns_transport_list(const TransportList& _transport_list)
-{
-    struct Into
-    {
-        static ::getdns_transport_list_t getdns_transport_list_t(TransportProtocol _protocol)
+        ::getdns_list* getdns_list_ptr = nullptr;
+        Data::List list{getdns_list_ptr = ::getdns_list_create()};
+        for (auto&& address : servers)
         {
-            switch (_protocol)
+            Data::Dict item{[](::getdns_dict** ptr) { *ptr = ::getdns_dict_create(); }};
+            if (address.is_v4())
             {
-                case TransportProtocol::udp: return ::GETDNS_TRANSPORT_UDP;
-                case TransportProtocol::tcp: return ::GETDNS_TRANSPORT_TCP;
-                case TransportProtocol::tls: return ::GETDNS_TRANSPORT_TLS;
+                const Data::BinData ipv4{"IPv4"};
+                item.set("address_type", *ipv4);
+                const auto bytes = address.to_v4().to_bytes();
+                const Data::BinData address_data{reinterpret_cast<const void*>(bytes.data()), bytes.size()};
+                item.set("address_data", *address_data);
             }
-            struct UnexpectedValue:Exception
+            else if (address.is_v6())
             {
-                const char* what()const noexcept override { return "unexpected value of TransportProtocol"; }
-            };
-            throw UnexpectedValue();
-        }
-    };
-    std::vector<::getdns_transport_list_t> list;
-    list.reserve(_transport_list.size());
-    std::transform(
-            _transport_list.begin(),
-            _transport_list.end(),
-            std::back_inserter(list),
-            Into::getdns_transport_list_t);
-    const auto retval = ::getdns_context_set_dns_transport_list(
-            context_ptr_.get(),
-            _transport_list.size(),
-            list.data());
-    if (retval != ::GETDNS_RETURN_GOOD)
-    {
-        struct ContextSetDnsTransportListException:Error
-        {
-            ContextSetDnsTransportListException(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw ContextSetDnsTransportListException(retval, __FILE__, __LINE__);
-    }
-    return *this;
-}
-
-Context& Context::set_upstream_recursive_servers(const std::list<boost::asio::ip::address>& _servers)
-{
-    Data::List list;
-    for (const auto& address : _servers)
-    {
-        Data::Dict item;
-        if (address.is_v4())
-        {
-            Data::set_item_of(item, "address_type", "IPv4");
-            typedef boost::asio::ip::address_v4::bytes_type IpAddressData;
-            auto bytes = address.to_v4().to_bytes();
-            const ::getdns_bindata address_data =
-                    {
-                        sizeof(IpAddressData::value_type[std::tuple_size<IpAddressData>::value]),
-                        bytes.data()
-                    };
-            Data::set_item_of(item, "address_data", &address_data);
-        }
-        else if (address.is_v6())
-        {
-            Data::set_item_of(item, "address_type", "IPv6");
-            typedef boost::asio::ip::address_v6::bytes_type IpAddressData;
-            auto bytes = address.to_v6().to_bytes();
-            const ::getdns_bindata address_data =
-                    {
-                        sizeof(IpAddressData::value_type[std::tuple_size<IpAddressData>::value]),
-                        bytes.data()
-                    };
-            Data::set_item_of(item, "address_data", &address_data);
-        }
-        Data::set_item_of(list, list.get_number_of_items(), const_cast<const Data::Dict&>(item).get_base_ptr());
-    }
-    const auto retval = ::getdns_context_set_upstream_recursive_servers(
-            context_ptr_.get(),
-            list.get_base_ptr());
-    if (retval != ::GETDNS_RETURN_GOOD)
-    {
-        struct ContextSetUpstreamRecursiveServersFailure:Error
-        {
-            ContextSetUpstreamRecursiveServersFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw ContextSetUpstreamRecursiveServersFailure(retval, __FILE__, __LINE__);
-    }
-    struct SetResolution
-    {
-        static void stub(::getdns_context* _context)
-        {
-            const auto retval = ::getdns_context_set_resolution_type(
-                    _context,
-                    ::GETDNS_RESOLUTION_STUB);
-            if (retval != ::GETDNS_RETURN_GOOD)
-            {
-                struct ContextSetResolutionStubFailure:Error
-                {
-                    ContextSetResolutionStubFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                        : Error(_error_code, _file, _line)
-                    { }
-                };
-                throw ContextSetResolutionStubFailure(retval, __FILE__, __LINE__);
+                const Data::BinData ipv6{"IPv6"};
+                item.set("address_type", *ipv6);
+                const auto bytes = address.to_v6().to_bytes();
+                const Data::BinData address_data{reinterpret_cast<const void*>(bytes.data()), bytes.size()};
+                item.set("address_data", *address_data);
             }
+            list.push_back(*item);
         }
-    };
-    SetResolution::stub(context_ptr_.get());
+        MUST_BE_GOOD(::getdns_context_set_upstream_recursive_servers(ptr_, getdns_list_ptr));
+    }
+    MUST_BE_GOOD(::getdns_context_set_resolution_type(ptr_, ::GETDNS_RESOLUTION_STUB));
     return *this;
 }
 
-Context& Context::set_follow_redirects(bool _yes)
+Context& Context::set_follow_redirects(bool yes)
 {
-    const auto retval = ::getdns_context_set_follow_redirects(
-            context_ptr_.get(),
-            _yes ? ::GETDNS_REDIRECTS_FOLLOW : ::GETDNS_REDIRECTS_DO_NOT_FOLLOW);
-    if (retval != ::GETDNS_RETURN_GOOD)
-    {
-        struct ContextSetFollowRedirectsFailure:Error
-        {
-            ContextSetFollowRedirectsFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw ContextSetFollowRedirectsFailure(retval, __FILE__, __LINE__);
-    }
+    MUST_BE_GOOD(::getdns_context_set_follow_redirects(ptr_, yes ? ::GETDNS_REDIRECTS_FOLLOW : ::GETDNS_REDIRECTS_DO_NOT_FOLLOW));
     return *this;
 }
 
-Context& Context::set_timeout(std::uint64_t _value_ms)
+Context& Context::set_timeout(Timeout value)
 {
-    const auto retval = ::getdns_context_set_timeout(context_ptr_.get(), _value_ms);
-    if (retval != ::GETDNS_RETURN_GOOD)
-    {
-        struct ContextSetTimeoutFailure:Error
-        {
-            ContextSetTimeoutFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw ContextSetTimeoutFailure(retval, __FILE__, __LINE__);
-    }
+    MUST_BE_GOOD(::getdns_context_set_timeout(ptr_, value.count()));
     return *this;
 }
 
-Context& Context::set_dnssec_trust_anchors(const std::list<Data::TrustAnchor>& _anchors)
+Context& Context::set_dnssec_trust_anchors(Data::TrustAnchorList anchors)
 {
-    Data::List anchors;
-    for (const auto& anchor : _anchors)
-    {
-        const auto anchor_dict = Data::Dict::get_trust_anchor(
-                anchor.zone,
-                anchor.flags,
-                anchor.protocol,
-                anchor.algorithm,
-                anchor.public_key);
-        Data::set_item_of(anchors, anchors.get_number_of_items(), anchor_dict.get_base_ptr());
-    }
-    const auto retval = ::getdns_context_set_dnssec_trust_anchors(
-            context_ptr_.get(),
-            anchors.get_base_ptr());
-    if (retval != ::GETDNS_RETURN_GOOD)
-    {
-        struct ContextSetDnssecTrustAnchorsFailure:Error
-        {
-            ContextSetDnssecTrustAnchorsFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw ContextSetDnssecTrustAnchorsFailure(retval, __FILE__, __LINE__);
-    }
+    MUST_BE_GOOD(::getdns_context_set_dnssec_trust_anchors(ptr_, anchors));
     return *this;
 }
 
-::getdns_context* Context::release_context()
+Context& Context::set_libevent_base(Event::Base& event_base)
 {
-    return context_ptr_.release();
+    MUST_BE_GOOD(::getdns_extension_set_libevent_base(ptr_, event_base));
+    return *this;
 }
 
-void Context::Deleter::operator()(::getdns_context* _context_ptr)const
+Context::operator ::getdns_context*()
 {
-    if (_context_ptr != nullptr)
-    {
-        ::getdns_context_destroy(_context_ptr);
-    }
+    return ptr_;
 }
 
 }//namespace GetDns

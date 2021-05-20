@@ -1,0 +1,2 @@
+# <repository> <commitish> <clone-path>
+https://github.com/getdnsapi/getdns.git develop 3rd_party/getdns

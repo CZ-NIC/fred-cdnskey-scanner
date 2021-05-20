@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2018  CZ.NIC, z. s. p. o.
+ * Copyright (C) 2017-2021  CZ.NIC, z. s. p. o.
  *
  * This file is part of FRED.
  *
@@ -16,42 +16,71 @@
  * You should have received a copy of the GNU General Public License
  * along with FRED.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 #include "src/hostname_resolver.hh"
 
-#include "src/getdns/request.hh"
+#include "src/getdns/context.hh"
+#include "src/getdns/data.hh"
+#include "src/getdns/exception.hh"
+#include "src/getdns/extensions_set.hh"
 #include "src/getdns/solver.hh"
+
+#include "src/time_unit.hh"
 
 #include "src/util/pipe.hh"
 #include "src/util/fork.hh"
 
+#include <cstring>
 #include <iostream>
 #include <list>
+
 
 namespace {
 
 const int max_number_of_unresolved_queries = 200;
 
-class Query:public GetDns::Request
+class Query
 {
 public:
-    Query(const std::string& _hostname,
-          const TimeUnit::Seconds& _timeout_sec,
-          const boost::optional<GetDns::TransportList>& _transport_list,
-          const std::list<boost::asio::ip::address>& _resolvers)
-        : hostname_(_hostname),
-          timeout_sec_(_timeout_sec),
-          transport_list_(_transport_list),
-          resolvers_(_resolvers),
-          context_ptr_(nullptr),
-          status_(Status::none)
+    Query(const std::string& hostname,
+          GetDns::Context context)
+        : hostname_{[&]() { char* const str = new char[hostname.length() + 1]; std::memcpy(str, hostname.c_str(), hostname.length() + 1); return str; }()},
+          context_{std::move(context)},
+          extensions_{make_extensions(GetDns::ExtensionsSet<GetDns::Extension::ReturnBothV4AndV6>{})},
+          status_{Status::none},
+          result_{}
     { }
-    ~Query()
+    Query(const Query&) = delete;
+    Query(Query&& src) noexcept
+        : hostname_{nullptr},
+          context_{std::move(src.context_)},
+          extensions_{std::move(src.extensions_)},
+          status_{src.status_},
+          result_{std::move(src.result_)}
     {
-        if (context_ptr_ != nullptr)
-        {
-            delete context_ptr_;
-            context_ptr_ = nullptr;
-        }
+        std::swap(src.hostname_, hostname_);
+    }
+    ~Query() noexcept
+    {
+        delete[] hostname_;
+    }
+    Query& operator=(const Query&) = delete;
+    Query& operator=(Query&& src) noexcept
+    {
+        std::swap(src.hostname_, hostname_);
+        std::swap(src.context_, context_);
+        std::swap(src.extensions_, extensions_);
+        status_ = src.status_;
+        std::swap(src.result_, result_);
+        return *this;
+    }
+    ::getdns_transaction_t start_transaction(Event::Base& event_base, ::getdns_callback_t callback_fnc, void* user_data)
+    {
+        context_.set_libevent_base(event_base);
+        ::getdns_transaction_t transaction_id;
+        MUST_BE_GOOD(::getdns_address(context_, hostname_, *extensions_, user_data, &transaction_id, callback_fnc));
+        status_ = Status::in_progress;
+        return transaction_id;
     }
     enum class Status
     {
@@ -62,189 +91,134 @@ public:
         timed_out,
         failed
     };
-    Status get_status()const
+    Status get_status() const
     {
         return status_;
     }
-    typedef std::set<boost::asio::ip::address> Result;
-    const Result& get_result()const
+    using Result = std::set<boost::asio::ip::address>;
+    const Result& get_result() const
     {
         if (this->get_status() == Status::completed)
         {
             return result_;
         }
-        struct NoResultAvailable:std::runtime_error
+        struct NoResultAvailable : std::runtime_error
         {
-            NoResultAvailable():std::runtime_error("Request is not completed yet") { }
+            NoResultAvailable() : std::runtime_error("Request is not completed yet") { }
         };
         throw NoResultAvailable();
     }
-    const std::string& get_hostname()const
+    const char* get_hostname() const
     {
         return hostname_;
     }
-private:
-    GetDns::Context& get_context()override
-    {
-        if (context_ptr_ != nullptr)
-        {
-            return *context_ptr_;
-        }
-        struct NullDereferenceException:std::runtime_error
-        {
-            NullDereferenceException():std::runtime_error("Dereferenced context_ptr_ is NULL") { }
-        };
-        throw NullDereferenceException();
-    }
-    void join(Event::Base& _event_base)override
-    {
-        if (context_ptr_ != nullptr)
-        {
-            delete context_ptr_;
-            context_ptr_ = nullptr;
-        }
-        context_ptr_ = new GetDns::Context(_event_base, GetDns::Context::InitialSettings::from_os);
-        if (transport_list_)
-        {
-            context_ptr_->set_dns_transport_list(*transport_list_);
-        }
-        if (!resolvers_.empty())
-        {
-            context_ptr_->set_upstream_recursive_servers(resolvers_);
-        }
-        context_ptr_->set_timeout(timeout_sec_.value * 1000);
-        status_ = Status::in_progress;
-    }
-    void on_complete(const GetDns::Data::Dict& _answer, ::getdns_transaction_t)override
+    void on_complete(GetDns::Data::DictRef answer, ::getdns_transaction_t)
     {
         status_ = Status::completed;
         result_.clear();
-        const GetDns::Data::Value just_address_answers = GetDns::Data::get<GetDns::Data::List>(_answer, "just_address_answers");
-        if (!GetDns::Data::Is(just_address_answers).of<GetDns::Data::List>().type)
-        {
-            return;
-        }
-        const GetDns::Data::List addresses = GetDns::Data::From(just_address_answers).get_value_of<GetDns::Data::List>();
-        const std::size_t number_of_addresses = addresses.get_number_of_items();
+        const auto addresses = answer.get<GetDns::Data::ListRef>("just_address_answers");
+        const std::size_t number_of_addresses = addresses.length();
         for (std::size_t idx = 0; idx < number_of_addresses; ++idx)
         {
-            const GetDns::Data::Value address_item = GetDns::Data::get<GetDns::Data::Dict>(addresses, idx);
-            if (!GetDns::Data::Is(address_item).of<GetDns::Data::Dict>().type)
-            {
-                continue;
-            }
-            const GetDns::Data::Dict address = GetDns::Data::From(address_item).get_value_of<GetDns::Data::Dict>();
-            const GetDns::Data::Value address_data = GetDns::Data::get<boost::asio::ip::address>(address, "address_data");
-            if (!GetDns::Data::Is(address_data).of<boost::asio::ip::address>().type)
-            {
-                continue;
-            }
-            result_.insert(GetDns::Data::From(address_data).get_value_of<boost::asio::ip::address>());
+            const auto address_data = addresses.get<GetDns::Data::DictRef>(idx).get<GetDns::Data::BinDataRef>("address_data");
+            result_.insert(address_data.as<boost::asio::ip::address>());
         }
     }
-    void on_cancel(::getdns_transaction_t)override
+    void on_cancel(::getdns_transaction_t)
     {
         status_ = Status::cancelled;
     }
-    void on_timeout(::getdns_transaction_t)override
+    void on_timeout(::getdns_transaction_t)
     {
         status_ = Status::timed_out;
     }
-    void on_error(::getdns_transaction_t)override
+    void on_error(::getdns_transaction_t)
     {
         status_ = Status::failed;
     }
-    const std::string hostname_;
-    const TimeUnit::Seconds timeout_sec_;
-    const boost::optional<GetDns::TransportList> transport_list_;
-    const std::list<boost::asio::ip::address> resolvers_;
-    GetDns::Context* context_ptr_;
+private:
+    const char* hostname_;
+    GetDns::Context context_;
+    GetDns::Data::Dict extensions_;
     Status status_;
     Result result_;
 };
 
-class QueryGenerator:public Event::Timeout
+template <typename ...Ts>
+class QueryGenerator : public Event::OnTimeout<QueryGenerator<Ts...>>
 {
 public:
+    using Solver = GetDns::Solver<Query>;
+    using OnTimeout = Event::OnTimeout<QueryGenerator>;
     QueryGenerator(
-            GetDns::Solver& _solver,
-            const std::set<std::string>& _hostnames,
-            const TimeUnit::Seconds& _query_timeout_sec,
-            const boost::optional<GetDns::TransportList>& _transport_list,
-            const std::list<boost::asio::ip::address>& _resolvers,
-            const TimeUnit::Nanoseconds& _assigned_time_nsec)
-        : Event::Timeout(_solver.get_event_base()),
-          solver_(_solver),
-          hostnames_(_hostnames),
-          hostname_ptr_(_hostnames.begin()),
-          remaining_queries_(_hostnames.size()),
-          query_timeout_sec_(_query_timeout_sec),
-          transport_list_(_transport_list),
-          resolvers_(_resolvers),
-          time_end_(TimeUnit::get_clock_monotonic() + _assigned_time_nsec)
+            Solver& solver,
+            std::set<std::string> hostnames,
+            GetDns::Context::Timeout query_timeout,
+            std::list<boost::asio::ip::address> resolvers,
+            std::chrono::nanoseconds assigned_time)
+        : OnTimeout{solver.get_event_base()},
+          solver_{solver},
+          hostnames_{std::move(hostnames)},
+          hostname_ptr_{hostnames_.begin()},
+          remaining_queries_{hostnames_.size()},
+          query_timeout_{query_timeout},
+          resolvers_{std::move(resolvers)},
+          time_end_{TimeUnit::get_uptime().get() + assigned_time}
     {
-        this->Event::Timeout::set(0);
+        this->OnTimeout::set(std::chrono::microseconds{0});
         while (0 < (remaining_queries_ + solver_.get_number_of_unresolved_requests()))
         {
             solver_.do_one_step();
-            const GetDns::Solver::ListOfRequestPtr finished_requests = solver_.pop_finished_requests();
-            for (const auto& finished_request_ptr : finished_requests)
+            const Solver::ListOfQueries finished_requests = solver_.pop_finished_requests();
+            for (auto&& query : finished_requests)
             {
-                auto const request_ptr = finished_request_ptr.get();
-                auto const query_ptr = dynamic_cast<const Query*>(request_ptr);
-                if (query_ptr != nullptr)
+                const char* const nameserver = query.get_hostname();
+                switch (query.get_status())
                 {
-                    const std::string nameserver = query_ptr->get_hostname();
-                    switch (query_ptr->get_status())
+                    case Query::Status::completed:
                     {
-                        case Query::Status::completed:
+                        const Query::Result addresses = query.get_result();
+                        if (addresses.empty())
                         {
-                            const Query::Result addresses = query_ptr->get_result();
-                            if (addresses.empty())
-                            {
-                                std::cout << "unresolved-ip " << nameserver << std::endl;
-                            }
-                            else
-                            {
-                                for (const auto& addr : addresses)
-                                {
-                                    std::cout << "resolved " << nameserver << " " << addr << std::endl;
-                                }
-                            }
-                            break;
-                        }
-                        case Query::Status::timed_out:
-                        case Query::Status::cancelled:
-                        case Query::Status::failed:
-                        case Query::Status::in_progress:
-                        case Query::Status::none:
                             std::cout << "unresolved-ip " << nameserver << std::endl;
-                            break;
+                        }
+                        else
+                        {
+                            for (auto&& addr : addresses)
+                            {
+                                std::cout << "resolved " << nameserver << " " << addr << std::endl;
+                            }
+                        }
+                        break;
                     }
+                    case Query::Status::timed_out:
+                    case Query::Status::cancelled:
+                    case Query::Status::failed:
+                    case Query::Status::in_progress:
+                    case Query::Status::none:
+                        std::cout << "unresolved-ip " << nameserver << std::endl;
+                        break;
                 }
             }
             if (remaining_queries_ <= 0)
             {
-                this->Event::Timeout::remove();
+                this->OnTimeout::remove();
             }
         }
     }
-    ~QueryGenerator() { }
-private:
-    Event::OnTimeout& on_timeout_occurrence()
+    QueryGenerator& on_timeout_occurrence()
     {
         if (solver_.get_number_of_unresolved_requests() < max_number_of_unresolved_queries)
         {
-            GetDns::RequestPtr request_ptr(
-                    new Query(
-                            *hostname_ptr_,
-                            query_timeout_sec_,
-                            transport_list_,
-                            resolvers_));
-            solver_.add_request_for_address_resolving(
-                    *hostname_ptr_,
-                    request_ptr,
-                    extensions_);
+            const auto make_context = [&]()
+            {
+                auto context = GetDns::Context{GetDns::Context::InitialSettings::FromOs{}};
+                context.set_timeout(query_timeout_)
+                       .set_upstream_recursive_servers(resolvers_)
+                       .set_dns_transport_list(GetDns::TransportsList<Ts...>{});
+                return context;
+            };
+            solver_.add_request(Query{*hostname_ptr_, make_context()});
             this->set_time_of_next_query();
             if (hostname_ptr_ != hostnames_.end())
             {
@@ -258,59 +232,58 @@ private:
         }
         return *this;
     }
+private:
     QueryGenerator& set_time_of_next_query()
     {
-        const struct ::timespec now = TimeUnit::get_clock_monotonic();
-        const TimeUnit::Nanoseconds remaining_time_nsec = time_end_ - now;
-        const std::uint64_t min_timeout_usec = 4000;//smaller value exhausts file descriptors :-(
-        if (remaining_time_nsec.value <= 0)
+        const auto now = TimeUnit::get_uptime();
+        using Time = TimeUnit::Nanoseconds<struct TimeTag_>;
+        const auto remaining_time = Time{time_end_ - now.get()};
+        static constexpr auto min_timeout = Time{std::chrono::microseconds{4000}};//smaller value exhausts file descriptors :-(
+        if (remaining_time <= Time::zero())
         {
-            this->Event::Timeout::set(min_timeout_usec);
+            this->OnTimeout::set(min_timeout.template as<std::chrono::microseconds>());
         }
         else
         {
-            const std::uint64_t the_one_query_time_usec = remaining_time_nsec.value / (1000 * remaining_queries_);
-            this->Event::Timeout::set(the_one_query_time_usec < min_timeout_usec
-                                      ? min_timeout_usec
-                                      : the_one_query_time_usec);
+            const auto one_query_time = remaining_time / remaining_queries_;
+            this->OnTimeout::set((one_query_time < min_timeout ? min_timeout
+                                                               : one_query_time).template as<std::chrono::microseconds>());
         }
         return *this;
     }
-    GetDns::Solver& solver_;
-    const std::set<std::string>& hostnames_;
+    Solver& solver_;
+    const std::set<std::string> hostnames_;
     std::set<std::string>::const_iterator hostname_ptr_;
     std::size_t remaining_queries_;
-    const TimeUnit::Seconds query_timeout_sec_;
-    const boost::optional<GetDns::TransportList>& transport_list_;
-    const std::list<boost::asio::ip::address>& resolvers_;
-    const struct ::timespec time_end_;
-    GetDns::Extensions extensions_;
+    const GetDns::Context::Timeout query_timeout_;
+    const std::list<boost::asio::ip::address> resolvers_;
+    const std::chrono::nanoseconds time_end_;
 };
 
 class Answer
 {
 public:
-    Answer(Event::Base& _base,
-           HostnameResolver::Result& _resolved,
-           std::set<std::string>& _unresolved,
-           const Util::ImReader& _source,
-           const TimeUnit::Seconds& _max_idle_sec)
-        : source_(_source),
-          resolved_(_resolved),
-          unresolved_(_unresolved),
-          event_ptr_(::event_new(_base.get_base(),
+    Answer(Event::Base& loop,
+           HostnameResolver::Result& resolved,
+           std::set<std::string>& unresolved,
+           const Util::ImReader& source,
+           std::chrono::seconds max_idle)
+        : source_{source},
+          resolved_{resolved},
+          unresolved_{unresolved},
+          event_ptr_{::event_new(loop,
                                  source_.get_descriptor(),
                                  monitored_events_ | EV_PERSIST,
                                  callback_routine,
-                                 this)),
-          max_idle_sec_(_max_idle_sec),
-          source_stream_closed_(false),
-          timed_out_(false)
+                                 this)},
+          max_idle_{max_idle},
+          source_stream_closed_{false},
+          timed_out_{false}
     {
         this->monitor_events_on_source_stream();
         while (true)
         {
-            _base.loop();
+            loop(Event::Loop::Once{});
             if (timed_out_)
             {
                 return;
@@ -391,7 +364,7 @@ private:
     Answer& monitor_events_on_source_stream()
     {
         struct ::timeval timeout;
-        timeout.tv_sec = max_idle_sec_.value;
+        timeout.tv_sec = max_idle_.count();
         timeout.tv_usec = 0;
         const int success = 0;
         const int retval = ::event_add(event_ptr_, &timeout);
@@ -500,47 +473,45 @@ private:
     HostnameResolver::Result& resolved_;
     std::set<std::string>& unresolved_;
     struct ::event* event_ptr_;
-    const TimeUnit::Seconds max_idle_sec_;
+    const std::chrono::seconds max_idle_;
     std::string content_;
     bool source_stream_closed_;
     bool timed_out_;
-    static constexpr short monitored_events_ = EV_READ;
+    static constexpr auto monitored_events_ = short{EV_READ};
 };
 
+template <typename ...Ts>
 class ChildProcess
 {
 public:
     ChildProcess(
-            const std::set<std::string>& _hostnames,
-            const TimeUnit::Seconds& _query_timeout_sec,
-            const boost::optional<GetDns::TransportList>& _transport_list,
-            const std::list<boost::asio::ip::address>& _resolvers,
-            const TimeUnit::Nanoseconds& _assigned_time_nsec,
-            const HostnameResolver::Result& _resolved,
-            const std::set<std::string>& _unresolved,
-            Util::Pipe& _pipe_to_parent)
-        : hostnames_(_hostnames),
-          query_timeout_sec_(_query_timeout_sec),
-          transport_list_(_transport_list),
-          resolvers_(_resolvers),
-          assigned_time_nsec_(_assigned_time_nsec),
-          resolved_(_resolved),
-          unresolved_(_unresolved),
-          pipe_to_parent_(_pipe_to_parent)
+            const std::set<std::string>& hostnames,
+            GetDns::Context::Timeout query_timeout,
+            const std::list<boost::asio::ip::address>& resolvers,
+            std::chrono::nanoseconds assigned_time,
+            const HostnameResolver::Result& resolved,
+            const std::set<std::string>& unresolved,
+            Util::Pipe& pipe_to_parent)
+        : hostnames_{hostnames},
+          query_timeout_{query_timeout},
+          resolvers_{resolvers},
+          assigned_time_{assigned_time},
+          resolved_{resolved},
+          unresolved_{unresolved},
+          pipe_to_parent_{pipe_to_parent}
     { }
     int operator()()const
     {
         Util::ImWriter to_parent(pipe_to_parent_, Util::ImWriter::Stream::stdout);
-        GetDns::Solver solver;
+        GetDns::Solver<Query> solver;
         if (resolved_.empty() && unresolved_.empty())
         {
-            const QueryGenerator resolve(
+            const QueryGenerator<Ts...> resolve{
                     solver,
                     hostnames_,
-                    query_timeout_sec_,
-                    transport_list_,
+                    query_timeout_,
                     resolvers_,
-                    assigned_time_nsec_);
+                    assigned_time_};
         }
         else
         {
@@ -562,22 +533,20 @@ public:
                     hostnames.insert(hostname);
                 }
             }
-            const auto resolve = QueryGenerator(
+            const QueryGenerator<Ts...> resolve{
                     solver,
                     hostnames,
-                    query_timeout_sec_,
-                    transport_list_,
+                    query_timeout_,
                     resolvers_,
-                    TimeUnit::Nanoseconds(assigned_time_nsec_.value * double(hostnames.size()) / hostnames_.size()));
+                    std::chrono::nanoseconds{static_cast<std::int64_t>(assigned_time_.count() * double(hostnames.size()) / hostnames_.size())}};
         }
         return EXIT_SUCCESS;
     }
 private:
     const std::set<std::string>& hostnames_;
-    const TimeUnit::Seconds& query_timeout_sec_;
-    const boost::optional<GetDns::TransportList>& transport_list_;
+    const GetDns::Context::Timeout query_timeout_;
     const std::list<boost::asio::ip::address>& resolvers_;
-    const TimeUnit::Nanoseconds& assigned_time_nsec_;
+    const std::chrono::nanoseconds assigned_time_;
     const HostnameResolver::Result& resolved_;
     const std::set<std::string>& unresolved_;
     Util::Pipe& pipe_to_parent_;
@@ -586,37 +555,35 @@ private:
 }//namespace {anonymous}
 
 HostnameResolver::Result HostnameResolver::get_result(
-        const std::set<std::string>& _hostnames,
-        const TimeUnit::Seconds& _query_timeout_sec,
-        const boost::optional<GetDns::TransportList>& _transport_list,
-        const std::list<boost::asio::ip::address>& _resolvers,
-        const TimeUnit::Nanoseconds& _assigned_time_nsec)
+        const std::set<std::string>& hostnames,
+        GetDns::Context::Timeout query_timeout,
+        const std::list<boost::asio::ip::address>& resolvers,
+        std::chrono::nanoseconds assigned_time)
 {
     Result resolved;
     std::set<std::string> unresolved;
-    if (_hostnames.empty())
+    if (hostnames.empty())
     {
         return resolved;
     }
-    while ((resolved.size() + unresolved.size()) < _hostnames.size())
+    while ((resolved.size() + unresolved.size()) < hostnames.size())
     {
         Util::Pipe pipe;
-        Util::Fork parent(
-                ChildProcess(
-                        _hostnames,
-                        _query_timeout_sec,
-                        _transport_list,
-                        _resolvers,
-                        _assigned_time_nsec,
+        Util::Fork parent{
+                ChildProcess<GetDns::TransportProtocol::Udp, GetDns::TransportProtocol::Tcp>{
+                        hostnames,
+                        query_timeout,
+                        resolvers,
+                        assigned_time,
                         resolved,
                         unresolved,
-                        pipe));
-        Util::ImReader from_child(pipe);
+                        pipe}};
+        Util::ImReader from_child{pipe};
         from_child.set_nonblocking();
         Event::Base monitor;
-        const double query_distance_sec = (_assigned_time_nsec.value / double(_hostnames.size())) / 1000000000LL;
-        const TimeUnit::Seconds answer_timeout_sec(query_distance_sec + _query_timeout_sec.value + 5);
-        const Answer answer(monitor, resolved, unresolved, from_child, answer_timeout_sec);
+        const auto query_distance_sec = (assigned_time.count() / double(hostnames.size())) / 1000000000LL;
+        const auto answer_timeout = std::chrono::seconds{static_cast<std::int64_t>(query_distance_sec + 5)} + query_timeout.as<std::chrono::seconds>();
+        const auto answer = Answer{monitor, resolved, unresolved, from_child, answer_timeout};
         try
         {
             const Util::Fork::ChildResultStatus child_result_status = parent.get_child_result_status();
@@ -625,7 +592,7 @@ HostnameResolver::Result HostnameResolver::get_result(
                 if (child_result_status.get_exit_status() == EXIT_SUCCESS)
                 {
                     std::cerr << "hostnames A and AAAA records resolved" << std::endl;
-                    if ((resolved.size() + unresolved.size()) < _hostnames.size())
+                    if ((resolved.size() + unresolved.size()) < hostnames.size())
                     {
                         throw std::runtime_error("hostname resolver doesn't completed its job");
                     }
