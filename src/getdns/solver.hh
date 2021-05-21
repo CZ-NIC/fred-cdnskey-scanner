@@ -120,6 +120,7 @@ void Solver<Query>::getdns_callback_function(
 {
     try
     {
+        Data::Dict answer{response};
         Solver* const solver_instance_ptr = reinterpret_cast<Solver*>(user_data_ptr);
         const auto request_itr = solver_instance_ptr->active_requests_.find(transaction_id);
         if (request_itr == solver_instance_ptr->active_requests_.end())
