@@ -137,9 +137,6 @@ abort_if_headers_not_found(
     sys/types.h
     sys/wait.h
     event2/event.h
-    getdns/getdns_ext_libevent.h
-    getdns/getdns_extra.h
-    getdns/getdns.h
     boost/archive/iterators/base64_from_binary.hpp
     boost/archive/iterators/binary_from_base64.hpp
     boost/archive/iterators/ostream_iterator.hpp
