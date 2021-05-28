@@ -145,16 +145,28 @@ public:
         {
             const auto reply = replies.get<GetDns::Data::DictRef>(reply_idx);
             const auto answers = reply.get<GetDns::Data::ListRef>("answer");
-            for (std::size_t answer_idx = 0; answer_idx < answers.length(); ++answer_idx)
+            const auto number_of_answers = answers.length();
+            for (std::size_t answer_idx = 0; answer_idx < number_of_answers; ++answer_idx)
             {
-                const auto answer = answers.get<GetDns::Data::DictRef>(answer_idx);
-                const auto rdata = answer.get<GetDns::Data::DictRef>("rdata");
-                Cdnskey cdnskey;
-                cdnskey.algorithm = rdata.get<GetDns::Data::IntegerRef>("algorithm");
-                cdnskey.flags = rdata.get<GetDns::Data::IntegerRef>("flags");
-                cdnskey.protocol = rdata.get<GetDns::Data::IntegerRef>("protocol");
-                cdnskey.public_key = GetDns::base64_encode(rdata.get<GetDns::Data::BinDataRef>("public_key"));
-                result_.push_back(std::move(cdnskey));
+                try
+                {
+                    const auto answer = answers.get<GetDns::Data::DictRef>(answer_idx);
+                    if ((static_cast<std::uint32_t>(answer.get<GetDns::Data::IntegerRef>("type")) == GETDNS_RRTYPE_CDNSKEY) &&
+                        (static_cast<std::uint32_t>(answer.get<GetDns::Data::IntegerRef>("class")) == GETDNS_RRCLASS_IN))
+                    {
+                        const auto rdata = answer.get<GetDns::Data::DictRef>("rdata");
+                        Cdnskey cdnskey;
+                        cdnskey.algorithm = rdata.get<GetDns::Data::IntegerRef>("algorithm");
+                        cdnskey.flags = rdata.get<GetDns::Data::IntegerRef>("flags");
+                        cdnskey.protocol = rdata.get<GetDns::Data::IntegerRef>("protocol");
+                        cdnskey.public_key = GetDns::base64_encode(rdata.get<GetDns::Data::BinDataRef>("public_key"));
+                        result_.push_back(std::move(cdnskey));
+                    }
+                }
+                catch (const ::GetDns::NoSuchDictName& e)
+                {
+                    std::cerr << "resolve " << hostname_ << ": " << e.what() << std::endl;
+                }
             }
         }
     }
