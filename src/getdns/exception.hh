@@ -42,6 +42,10 @@ struct DnssecWithStubDisallowed : Exception { };
 struct MemoryError : Exception { };
 struct InvalidParameter : Exception { };
 struct NotImplemented : Exception { };
+struct IoError : Exception { };
+struct NoUpstreamAvailable : Exception { };
+struct NeedMoreSpace : Exception { };
+struct UnknownGetDnsErrorCode : Exception { };
 
 void success_required(::getdns_return_t result, const char* file, int line);
 
@@ -61,6 +65,10 @@ template <> [[noreturn]] void raise<DnssecWithStubDisallowed>(const char* file, 
 template <> [[noreturn]] void raise<MemoryError>(const char* file, int line);
 template <> [[noreturn]] void raise<InvalidParameter>(const char* file, int line);
 template <> [[noreturn]] void raise<NotImplemented>(const char* file, int line);
+template <> [[noreturn]] void raise<IoError>(const char* file, int line);
+template <> [[noreturn]] void raise<NoUpstreamAvailable>(const char* file, int line);
+template <> [[noreturn]] void raise<NeedMoreSpace>(const char* file, int line);
+template <> [[noreturn]] void raise<UnknownGetDnsErrorCode>(const char* file, int line);
 
 #define MUST_BE_GOOD(RESULT) ::GetDns::success_required(RESULT, __FILE__, __LINE__)
 

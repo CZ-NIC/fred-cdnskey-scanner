@@ -19,6 +19,8 @@
 
 #include "src/getdns/exception.hh"
 
+#include <getdns/getdns_extra.h>
+
 #include <iostream>
 #include <sstream>
 
@@ -189,6 +191,39 @@ template <>
     throw Error{};
 }
 
+template <>
+[[noreturn]] void raise<IoError>(const char* file, int line)
+{
+    struct Error : IoError
+    {
+        const char* what() const noexcept override { return GETDNS_RETURN_IO_ERROR_TEXT; }
+    };
+    log_error(file, line, Error{}.what());
+    throw Error{};
+}
+
+template <>
+[[noreturn]] void raise<NoUpstreamAvailable>(const char* file, int line)
+{
+    struct Error : NoUpstreamAvailable
+    {
+        const char* what() const noexcept override { return GETDNS_RETURN_NO_UPSTREAM_AVAILABLE_TEXT; }
+    };
+    log_error(file, line, Error{}.what());
+    throw Error{};
+}
+
+template <>
+[[noreturn]] void raise<NeedMoreSpace>(const char* file, int line)
+{
+    struct Error : NeedMoreSpace
+    {
+        const char* what() const noexcept override { return GETDNS_RETURN_NEED_MORE_SPACE_TEXT; }
+    };
+    log_error(file, line, Error{}.what());
+    throw Error{};
+}
+
 void success_required(::getdns_return_t result, const char* file, int line)
 {
     if (result == ::GETDNS_RETURN_GOOD)
@@ -228,12 +263,29 @@ void success_required(::getdns_return_t result, const char* file, int line)
         case ::GETDNS_RETURN_NOT_IMPLEMENTED:
             raise<NotImplemented>(file, line);
     }
-    struct Error : Exception
+    switch (static_cast<int>(result))
     {
-        const char* what() const noexcept override { return "unknown GetDns return value"; }
+        case GETDNS_RETURN_IO_ERROR:
+            raise<IoError>(file, line);
+        case GETDNS_RETURN_NO_UPSTREAM_AVAILABLE:
+            raise<NoUpstreamAvailable>(file, line);
+        case GETDNS_RETURN_NEED_MORE_SPACE:
+            raise<NeedMoreSpace>(file, line);
+    }
+    class Error : public UnknownGetDnsErrorCode
+    {
+    public:
+        explicit Error(::getdns_return_t result)
+            : UnknownGetDnsErrorCode{},
+              msg_{"unknown GetDns return value " + std::to_string(result)}
+        { }
+        const char* what() const noexcept override { return msg_.c_str(); }
+    private:
+        std::string msg_;
     };
-    log_error(file, line, Error{}.what());
-    throw Error{};
+    const Error error{result};
+    log_error(file, line, error.what());
+    throw error;
 }
 
 }//namespace GetDns
