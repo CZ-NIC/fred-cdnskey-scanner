@@ -292,7 +292,7 @@ private:
         const auto now = TimeUnit::get_uptime();
         using Time = TimeUnit::Nanoseconds<struct TimeTag_>;
         const auto remaining_time = Time{time_end_ - now.get()};
-        static constexpr auto min_timeout = Time{std::chrono::microseconds{1000}};//smaller value exhausts file descriptors :-(
+        static constexpr auto min_timeout = Time{std::chrono::microseconds{1600}};//smaller value exhausts file descriptors :-(
         if (remaining_time <= Time::zero())
         {
             this->OnTimeout::set(min_timeout.template as<std::chrono::microseconds>());
