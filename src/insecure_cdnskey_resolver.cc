@@ -59,6 +59,41 @@ struct Cdnskey
 
 using Nameservers = std::set<std::string>;
 
+bool is_public(const boost::asio::ip::address_v4& addr)
+{
+    return !((addr.to_uint() & 0xFF000000) == 0x0A000000) && // 10.0.0.0/8
+           !((addr.to_uint() & 0xFFF00000) == 0xAC100000) && // 172.16.0.0/12
+           !((addr.to_uint() & 0xFFFF0000) == 0xC0A80000) && // 192.168.0.0/16
+           !((addr.to_uint() & 0xFFFF0000) == 0xA9FE0000) && // 169.254.0.0/16
+           !addr.is_loopback() &&
+           !addr.is_multicast() &&
+           !addr.is_unspecified();
+}
+
+bool is_public(const boost::asio::ip::address_v6& addr)
+{
+    if (addr.is_v4_mapped() || addr.is_v4_compatible())
+    {
+        return is_public(addr.to_v4());
+    }
+    return !addr.is_link_local() &&
+           !addr.is_loopback() &&
+           !addr.is_multicast() &&
+           !addr.is_multicast_global() &&
+           !addr.is_multicast_link_local() &&
+           !addr.is_multicast_node_local() &&
+           !addr.is_multicast_org_local() &&
+           !addr.is_multicast_site_local() &&
+           !addr.is_site_local() &&
+           !addr.is_unspecified();
+}
+
+bool is_public(const boost::asio::ip::address& addr)
+{
+    return addr.is_v4() ? is_public(addr.to_v4())
+                        : is_public(addr.to_v6());
+}
+
 class Query
 {
 public:
@@ -102,9 +137,18 @@ public:
         context_.set_libevent_base(event_base);
         ::getdns_transaction_t transaction_id;
         context_.set_upstream_recursive_servers(std::list<boost::asio::ip::address>{task_.address});
-        MUST_BE_GOOD(::getdns_general(context_, hostname_, std::uint16_t{GETDNS_RRTYPE_CDNSKEY}, *extensions_, user_data, &transaction_id, callback_fnc));
-        status_ = Status::in_progress;
-        return transaction_id;
+        try
+        {
+            MUST_BE_GOOD(::getdns_general(context_, hostname_, std::uint16_t{GETDNS_RRTYPE_CDNSKEY}, *extensions_, user_data, &transaction_id, callback_fnc));
+            status_ = Status::in_progress;
+            return transaction_id;
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << hostname_ << " CDNSKEY resolved, exception caught: " << e.what() << std::endl;
+            status_ = Status::failed;
+            throw;
+        }
     }
     enum class Status
     {
@@ -265,19 +309,46 @@ public:
     {
         if (solver_.get_number_of_unresolved_requests() < max_number_of_unresolved_queries)
         {
-            const auto make_context = [&]()
+            while (true)
             {
-                auto context = GetDns::Context{GetDns::Context::InitialSettings::FromOs{}};
-                context.set_timeout(query_timeout_)
-                       .set_dns_transport_list(GetDns::TransportsList<Ts...>{});
-                return context;
-            };
-            solver_.add_request(Query{*to_resolve_itr_, make_context()});
-            this->set_time_of_next_query();
-            if (to_resolve_itr_ != to_resolve_.end())
-            {
-                ++to_resolve_itr_;
-                --remaining_queries_;
+                const auto make_context = [&]()
+                {
+                    auto context = GetDns::Context{GetDns::Context::InitialSettings::FromOs{}};
+                    context.set_timeout(query_timeout_)
+                        .set_dns_transport_list(GetDns::TransportsList<Ts...>{});
+                    return context;
+                };
+                const bool request_added = [&]()
+                {
+                    try
+                    {
+                        solver_.add_request(Query{*to_resolve_itr_, make_context()});
+                        return true;
+                    }
+                    catch (...)
+                    {
+                        std::for_each(
+                                begin(to_resolve_itr_->nameservers),
+                                end(to_resolve_itr_->nameservers),
+                                [&](auto&& nameserver)
+                                {
+                                    std::cout << "unresolved " << nameserver << " "
+                                            << to_resolve_itr_->address << " "
+                                            << to_resolve_itr_->domain << std::endl;
+                                });
+                        return false;
+                    }
+                }();
+                this->set_time_of_next_query();
+                if (to_resolve_itr_ != to_resolve_.end())
+                {
+                    ++to_resolve_itr_;
+                    --remaining_queries_;
+                }
+                if (request_added)
+                {
+                    break;
+                }
             }
         }
         else if (0 < remaining_queries_)
@@ -292,7 +363,7 @@ private:
         const auto now = TimeUnit::get_uptime();
         using Time = TimeUnit::Nanoseconds<struct TimeTag_>;
         const auto remaining_time = Time{time_end_ - now.get()};
-        static constexpr auto min_timeout = Time{std::chrono::microseconds{1600}};//smaller value exhausts file descriptors :-(
+        static constexpr auto min_timeout = Time{std::chrono::microseconds{1000}};//smaller value exhausts file descriptors :-(
         if (remaining_time <= Time::zero())
         {
             this->OnTimeout::set(min_timeout.template as<std::chrono::microseconds>());
@@ -650,13 +721,36 @@ void InsecureCdnskeyResolver::resolve(
     {
         return;
     }
+    VectorOfInsecures to_resolve_on_public_addresses;
+    to_resolve_on_public_addresses.reserve(to_resolve.size());
+    std::copy_if(
+            begin(to_resolve),
+            end(to_resolve),
+            back_inserter(to_resolve_on_public_addresses),
+            [](auto&& insecure)
+            {
+                if (is_public(insecure.address))
+                {
+                    return true;
+                }
+                std::for_each(
+                        begin(insecure.nameservers),
+                        end(insecure.nameservers),
+                        [&](auto&& nameserver)
+                        {
+                            std::cout << "unresolved " << nameserver << " "
+                                      << insecure.address << " "
+                                      << insecure.domain << std::endl;
+                        });
+                return false;
+            });
     std::set<QueryDone> answered;
-    while (answered.size() < to_resolve.size())
+    while (answered.size() < to_resolve_on_public_addresses.size())
     {
         Util::Pipe pipe;
         Util::Fork parent{
                 ChildProcess<GetDns::TransportProtocol::Tcp>{
-                        to_resolve,
+                        to_resolve_on_public_addresses,
                         query_timeout,
                         assigned_time,
                         answered,
@@ -664,7 +758,7 @@ void InsecureCdnskeyResolver::resolve(
         Util::ImReader from_child{pipe};
         from_child.set_nonblocking();
         Event::Base monitor;
-        const auto query_distance_sec = (assigned_time.count() / double(to_resolve.size())) / 1000000000LL;
+        const auto query_distance_sec = (assigned_time.count() / double(to_resolve_on_public_addresses.size())) / 1000000000LL;
         const auto answer_timeout = std::chrono::seconds{static_cast<std::int64_t>(query_distance_sec + 5)} + query_timeout.as<std::chrono::seconds>();
         const auto answer = Answer{monitor, answered, from_child, answer_timeout};
         try
@@ -675,7 +769,7 @@ void InsecureCdnskeyResolver::resolve(
                 if (child_result_status.get_exit_status() == EXIT_SUCCESS)
                 {
                     std::cerr << "insecure CDNSKEY records resolved" << std::endl;
-                    if (answered.size() < to_resolve.size())
+                    if (answered.size() < to_resolve_on_public_addresses.size())
                     {
                         throw std::runtime_error("insecure CDNSKEY resolver doesn't completed its job");
                     }
