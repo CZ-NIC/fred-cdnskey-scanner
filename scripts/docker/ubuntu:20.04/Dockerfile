@@ -10,7 +10,11 @@ RUN apt-get -y update                       \
             bash-completion                 \
             git                             \
             libboost-system-dev             \
-            libevent-dev                    \
             libgetdns-dev                   \
+            libevent-dev                    \
+            libssl-dev                      \
+            libidn2-dev                     \
+            libunbound-dev                  \
+            check                           \
         && apt-get -y clean                 \
         && rm -rf /var/lib/apt/lists/*
