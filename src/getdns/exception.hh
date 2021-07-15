@@ -68,7 +68,6 @@ template <> [[noreturn]] void raise<NotImplemented>(const char* file, int line);
 template <> [[noreturn]] void raise<IoError>(const char* file, int line);
 template <> [[noreturn]] void raise<NoUpstreamAvailable>(const char* file, int line);
 template <> [[noreturn]] void raise<NeedMoreSpace>(const char* file, int line);
-template <> [[noreturn]] void raise<UnknownGetDnsErrorCode>(const char* file, int line);
 
 #define MUST_BE_GOOD(RESULT) ::GetDns::success_required(RESULT, __FILE__, __LINE__)
 
