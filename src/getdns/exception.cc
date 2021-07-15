@@ -226,10 +226,6 @@ template <>
 
 void success_required(::getdns_return_t result, const char* file, int line)
 {
-    if (result == ::GETDNS_RETURN_GOOD)
-    {
-        return;
-    }
     switch (result)
     {
         case ::GETDNS_RETURN_GOOD:
