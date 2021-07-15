@@ -346,7 +346,7 @@ private:
     GetDns::Context::Timeout query_timeout_;
     const std::list<boost::asio::ip::address>& resolvers_;
     const GetDns::Data::TrustAnchorList& trust_anchors_;
-    const std::chrono::nanoseconds time_end_;
+    std::chrono::nanoseconds time_end_;
 };
 
 class Answer
@@ -584,7 +584,7 @@ private:
     const Util::ImReader& source_;
     Domains& answered_;
     struct ::event* event_ptr_;
-    const std::chrono::seconds max_idle_;
+    std::chrono::seconds max_idle_;
     std::string content_;
     bool source_stream_closed_;
     bool timed_out_;
@@ -648,10 +648,10 @@ public:
     }
 private:
     const Domains& to_resolve_;
-    const GetDns::Context::Timeout query_timeout_;
+    GetDns::Context::Timeout query_timeout_;
     const std::list<boost::asio::ip::address>& resolvers_;
-    const GetDns::Data::TrustAnchorList trust_anchors_;
-    const std::chrono::nanoseconds assigned_time_;
+    GetDns::Data::TrustAnchorList trust_anchors_;
+    std::chrono::nanoseconds assigned_time_;
     const Domains& answered_;
     Util::Pipe& pipe_to_parent_;
 };

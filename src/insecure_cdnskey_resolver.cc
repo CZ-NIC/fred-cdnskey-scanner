@@ -380,8 +380,8 @@ private:
     const VectorOfInsecures& to_resolve_;
     VectorOfInsecures::const_iterator to_resolve_itr_;
     std::size_t remaining_queries_;
-    const GetDns::Context::Timeout query_timeout_;
-    const std::chrono::nanoseconds time_end_;
+    GetDns::Context::Timeout query_timeout_;
+    std::chrono::nanoseconds time_end_;
 };
 
 struct QueryDone
@@ -395,8 +395,8 @@ struct QueryDone
         : domain{query.domain},
           address_of_nameserver{query.address}
     { }
-    const std::string domain;
-    const boost::asio::ip::address address_of_nameserver;
+    std::string domain;
+    boost::asio::ip::address address_of_nameserver;
     friend bool operator<(const QueryDone& lhs, const QueryDone& rhs) noexcept
     {
         return (lhs.domain < rhs.domain) ||
@@ -647,7 +647,7 @@ private:
     const Util::ImReader& source_;
     AnsweredQueries& answered_;
     struct ::event* event_ptr_;
-    const std::chrono::seconds max_idle_;
+    std::chrono::seconds max_idle_;
     std::string content_;
     bool source_stream_closed_;
     bool timed_out_;

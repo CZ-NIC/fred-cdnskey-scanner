@@ -37,7 +37,7 @@
 
 namespace {
 
-const int max_number_of_unresolved_queries = 200;
+constexpr int max_number_of_unresolved_queries = 200;
 
 class Query
 {
@@ -252,12 +252,12 @@ private:
         return *this;
     }
     Solver& solver_;
-    const std::set<std::string> hostnames_;
+    std::set<std::string> hostnames_;
     std::set<std::string>::const_iterator hostname_ptr_;
     std::size_t remaining_queries_;
-    const GetDns::Context::Timeout query_timeout_;
-    const std::list<boost::asio::ip::address> resolvers_;
-    const std::chrono::nanoseconds time_end_;
+    GetDns::Context::Timeout query_timeout_;
+    std::list<boost::asio::ip::address> resolvers_;
+    std::chrono::nanoseconds time_end_;
 };
 
 class Answer
@@ -473,7 +473,7 @@ private:
     HostnameResolver::Result& resolved_;
     std::set<std::string>& unresolved_;
     struct ::event* event_ptr_;
-    const std::chrono::seconds max_idle_;
+    std::chrono::seconds max_idle_;
     std::string content_;
     bool source_stream_closed_;
     bool timed_out_;
@@ -544,9 +544,9 @@ public:
     }
 private:
     const std::set<std::string>& hostnames_;
-    const GetDns::Context::Timeout query_timeout_;
+    GetDns::Context::Timeout query_timeout_;
     const std::list<boost::asio::ip::address>& resolvers_;
-    const std::chrono::nanoseconds assigned_time_;
+    std::chrono::nanoseconds assigned_time_;
     const HostnameResolver::Result& resolved_;
     const std::set<std::string>& unresolved_;
     Util::Pipe& pipe_to_parent_;
