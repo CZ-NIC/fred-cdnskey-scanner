@@ -522,7 +522,7 @@ private:
         char buffer[0x10000];
         while (true)
         {
-            static const ::ssize_t failure = -1;
+            static constexpr ::ssize_t failure = -1;
             const auto read_retval = ::read(source_.get_descriptor(), buffer, sizeof(buffer));
             const bool read_failed = (read_retval == failure);
             if (!read_failed)
@@ -698,7 +698,7 @@ void SecureCdnskeyResolver::resolve(
                     std::cerr << "secure CDNSKEY records resolved" << std::endl;
                     if (answered.size() < to_resolve.size())
                     {
-                        throw std::runtime_error("secure CDNSKEY resolver doesn't completed its job");
+                        throw std::runtime_error("secure CDNSKEY resolver did not complete it's job");
                     }
                     return;
                 }

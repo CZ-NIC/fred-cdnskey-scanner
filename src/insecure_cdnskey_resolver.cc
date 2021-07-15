@@ -26,8 +26,8 @@
 #include "src/getdns/extensions_set.hh"
 #include "src/getdns/solver.hh"
 
-#include "src/util/pipe.hh"
 #include "src/util/fork.hh"
+#include "src/util/pipe.hh"
 
 #include <cstddef>
 #include <cstdint>
@@ -163,7 +163,7 @@ public:
     {
         return status_;
     }
-    typedef std::vector<Cdnskey> Result;
+    using Result = std::vector<Cdnskey>;
     const Result& get_result() const
     {
         if (this->get_status() == Status::completed)
@@ -771,7 +771,7 @@ void InsecureCdnskeyResolver::resolve(
                     std::cerr << "insecure CDNSKEY records resolved" << std::endl;
                     if (answered.size() < to_resolve_on_public_addresses.size())
                     {
-                        throw std::runtime_error("insecure CDNSKEY resolver doesn't completed its job");
+                        throw std::runtime_error("insecure CDNSKEY resolver did not complete it's job");
                     }
                     return;
                 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2018  CZ.NIC, z. s. p. o.
+ * Copyright (C) 2017-2021  CZ.NIC, z. s. p. o.
  *
  * This file is part of FRED.
  *
@@ -16,6 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with FRED.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 #include "src/util/pipe.hh"
 
 #include <fcntl.h>
@@ -31,7 +32,7 @@ namespace Util {
 
 namespace {
 
-const int invalid_descriptor = -1;
+constexpr int invalid_descriptor = -1;
 
 enum class Direction
 {
@@ -110,7 +111,7 @@ void ImReader::set_nonblocking()const
     {
         FcntlFailed(int error_code):std::runtime_error(std::string("fcntl() failed: ") + std::strerror(error_code)) { }
     };
-    static const int failure = -1;
+    static constexpr int failure = -1;
     const int current_flags = ::fcntl(this->get_descriptor(), F_GETFL);
     if (current_flags == failure)
     {
@@ -122,7 +123,7 @@ void ImReader::set_nonblocking()const
         return;
     }
     const int new_flags = current_flags | O_NONBLOCK;
-    static const int success = 0;
+    static constexpr int success = 0;
     if (::fcntl(this->get_descriptor(), F_SETFL, new_flags) != success)
     {
         throw FcntlFailed(errno);
@@ -166,7 +167,7 @@ void close(int (&pipe_fd)[2])
     if (fd != invalid_descriptor)
     {
         const int result = ::close(fd);
-        const int success = 0;
+        static constexpr int success = 0;
         if (result == success)
         {
             fd = invalid_descriptor;
@@ -183,7 +184,7 @@ void close(int (&pipe_fd)[2])
 template <Direction direction>
 void dup(int (&pipe_fd)[2], int new_fd)
 {
-    static const int failure = -1;
+    static constexpr int failure = -1;
     const int retval = ::dup2(Descriptor<direction>::get(pipe_fd), new_fd);
     if (retval != failure)
     {

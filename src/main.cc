@@ -22,10 +22,10 @@
 #include "src/secure_cdnskey_resolver.hh"
 #include "src/time_unit.hh"
 
-#include "src/getdns/data.hh"
 #include "src/getdns/context.hh"
-#include "src/getdns/solver.hh"
+#include "src/getdns/data.hh"
 #include "src/getdns/exception.hh"
+#include "src/getdns/solver.hh"
 
 #include <boost/asio/ip/address.hpp>
 #include <boost/optional.hpp>
@@ -55,8 +55,8 @@
 
 namespace {
 
-typedef std::set<std::string> Nameservers;
-typedef std::set<std::string> Domains;
+using Nameservers = std::set<std::string>;
+using Domains = std::set<std::string>;
 
 class DomainsToScan
 {
@@ -67,8 +67,8 @@ public:
     std::size_t get_number_of_domains() const;
     std::size_t get_number_of_secure_domains() const;
     Nameservers get_nameservers() const;
-    const Domains& get_signed_domains() const;
-    Domains get_unsigned_domains_of(const std::string& nameserver) const;
+    const Domains& get_secure_domains() const;
+    Domains get_insecure_domains_of(const std::string& nameserver) const;
 private:
     DomainsToScan& append_data(const char* data_chunk, std::streamsize data_chunk_length);
     void data_finished();
@@ -78,11 +78,11 @@ private:
         secure,
         insecure,
     } section_;
-    typedef std::map<std::string, Domains> DomainsOfNamserver;
-    DomainsOfNamserver unsigned_domains_of_namserver_;
+    using DomainsOfNamserver = std::map<std::string, Domains>;
+    DomainsOfNamserver insecure_domains_of_namserver_;
     std::string nameserver_;
-    Domains signed_domains_;
-    Domains unsigned_domains_;
+    Domains secure_domains_;
+    Domains insecure_domains_;
     std::string rest_of_data_;
     bool data_starts_at_new_line_;
 };
@@ -108,7 +108,7 @@ int main(int argc, char* argv[])
     if ((argc <= 0) || (argv[0] == nullptr))
     {
         std::cerr << "main() arguments are crazy" << std::endl;
-        return EXIT_SUCCESS;
+        return EXIT_FAILURE;
     }
     std::string hostname_resolvers_opt;
     std::string cdnskey_resolvers_opt;
@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
     char** arg_ptr = argv + 1;
     while ((arg_ptr != arg_end) && (*arg_ptr != nullptr))
     {
-        const int are_the_same = 0;
+        static constexpr int are_the_same = 0;
         if (std::strcmp(*arg_ptr, "--hostname_resolvers") == are_the_same)
         {
             if (!hostname_resolvers_opt.empty())
@@ -323,7 +323,7 @@ int main(int argc, char* argv[])
                 query_timeout,
                 time_for_insecure_resolver);
         SecureCdnskeyResolver::resolve(
-                domains_to_scan.get_signed_domains(),
+                domains_to_scan.get_secure_domains(),
                 query_timeout,
                 cdnskey_resolvers,
                 GetDns::Data::TrustAnchorList{anchors},
@@ -375,14 +375,14 @@ DomainsToScan::DomainsToScan(std::istream& data_source)
 
 std::size_t DomainsToScan::get_number_of_nameservers() const
 {
-    return unsigned_domains_of_namserver_.size();
+    return insecure_domains_of_namserver_.size();
 }
 
 std::size_t DomainsToScan::get_number_of_domains() const
 {
-    std::size_t sum_count = signed_domains_.size();
-    for (DomainsOfNamserver::const_iterator itr = unsigned_domains_of_namserver_.begin();
-         itr != unsigned_domains_of_namserver_.end(); ++itr)
+    std::size_t sum_count = secure_domains_.size();
+    for (DomainsOfNamserver::const_iterator itr = insecure_domains_of_namserver_.begin();
+         itr != insecure_domains_of_namserver_.end(); ++itr)
     {
         sum_count += itr->second.size();
     }
@@ -391,11 +391,11 @@ std::size_t DomainsToScan::get_number_of_domains() const
 
 std::size_t DomainsToScan::get_number_of_secure_domains() const
 {
-    return signed_domains_.size();
+    return secure_domains_.size();
 }
 
-constexpr auto section_of_signed_domains = "[secure]";
-constexpr auto section_of_unsigned_domains = "[insecure]";
+constexpr auto section_of_secure_domains = "[secure]";
+constexpr auto section_of_insecure_domains = "[insecure]";
 
 DomainsToScan& DomainsToScan::append_data(const char* data_chunk, std::streamsize data_chunk_length)
 {
@@ -420,23 +420,23 @@ DomainsToScan& DomainsToScan::append_data(const char* data_chunk, std::streamsiz
         const bool check_section_flag = data_starts_at_new_line_ && line_end_reached;
         if (check_section_flag)
         {
-            const bool section_of_signed_domains_reached = item == section_of_signed_domains;
-            if (section_of_signed_domains_reached)
+            const bool section_of_secure_domains_reached = item == section_of_secure_domains;
+            if (section_of_secure_domains_reached)
             {
                 section_ = Section::secure;
                 nameserver_.clear();
-                unsigned_domains_.clear();
+                insecure_domains_.clear();
                 data_starts_at_new_line_ = true;
                 ++current_pos;
                 item_begin = current_pos;
                 continue;
             }
-            const bool section_of_unsigned_domains_reached = item == section_of_unsigned_domains;
-            if (section_of_unsigned_domains_reached)
+            const bool section_of_insecure_domains_reached = item == section_of_insecure_domains;
+            if (section_of_insecure_domains_reached)
             {
                 section_ = Section::insecure;
                 nameserver_.clear();
-                unsigned_domains_.clear();
+                insecure_domains_.clear();
                 data_starts_at_new_line_ = true;
                 ++current_pos;
                 item_begin = current_pos;
@@ -448,7 +448,7 @@ DomainsToScan& DomainsToScan::append_data(const char* data_chunk, std::streamsiz
             case Section::secure:
                 if (!item.empty())
                 {
-                    signed_domains_.insert(item);
+                    secure_domains_.insert(item);
                 }
                 else
                 {
@@ -466,13 +466,13 @@ DomainsToScan& DomainsToScan::append_data(const char* data_chunk, std::streamsiz
                     }
                     nameserver_ = item;
                     data_starts_at_new_line_ = false;
-                    unsigned_domains_.clear();
+                    insecure_domains_.clear();
                 }
                 else
                 {
                     if (!item.empty())
                     {
-                        unsigned_domains_.insert(item);
+                        insecure_domains_.insert(item);
                     }
                     else
                     {
@@ -487,13 +487,13 @@ DomainsToScan& DomainsToScan::append_data(const char* data_chunk, std::streamsiz
         if (line_end_reached)
         {
             const bool nameserver_data_available =
-                    (section_ == Section::insecure) && !nameserver_.empty() && !unsigned_domains_.empty();
+                    (section_ == Section::insecure) && !nameserver_.empty() && !insecure_domains_.empty();
             if (nameserver_data_available)
             {
-                unsigned_domains_of_namserver_.insert(std::make_pair(nameserver_, unsigned_domains_));
+                insecure_domains_of_namserver_.insert(std::make_pair(nameserver_, insecure_domains_));
             }
             nameserver_.clear();
-            unsigned_domains_.clear();
+            insecure_domains_.clear();
             data_starts_at_new_line_ = true;
         }
         ++current_pos;
@@ -510,13 +510,13 @@ void DomainsToScan::data_finished()
     const bool check_section_flag = data_starts_at_new_line_;
     if (check_section_flag)
     {
-        const bool section_of_signed_domains_reached = item == section_of_signed_domains;
-        if (section_of_signed_domains_reached)
+        const bool section_of_secure_domains_reached = item == section_of_secure_domains;
+        if (section_of_secure_domains_reached)
         {
             return;
         }
-        const bool section_of_unsigned_domains_reached = item == section_of_unsigned_domains;
-        if (section_of_unsigned_domains_reached)
+        const bool section_of_insecure_domains_reached = item == section_of_insecure_domains;
+        if (section_of_insecure_domains_reached)
         {
             return;
         }
@@ -526,7 +526,7 @@ void DomainsToScan::data_finished()
         case Section::secure:
             if (!item.empty())
             {
-                signed_domains_.insert(item);
+                secure_domains_.insert(item);
             }
             return;
         case Section::insecure:
@@ -536,15 +536,15 @@ void DomainsToScan::data_finished()
             {
                 if (!item.empty())
                 {
-                    unsigned_domains_.insert(item);
+                    insecure_domains_.insert(item);
                 }
-                const bool nameserver_data_available = !nameserver_.empty() && !unsigned_domains_.empty();
+                const bool nameserver_data_available = !nameserver_.empty() && !insecure_domains_.empty();
                 if (nameserver_data_available)
                 {
-                    unsigned_domains_of_namserver_.insert(std::make_pair(nameserver_, unsigned_domains_));
+                    insecure_domains_of_namserver_.insert(std::make_pair(nameserver_, insecure_domains_));
                 }
                 nameserver_.clear();
-                unsigned_domains_.clear();
+                insecure_domains_.clear();
             }
             return;
         }
@@ -559,10 +559,10 @@ VectorOfInsecures resolve_hostnames_of_nameservers(
         std::chrono::nanoseconds runtime,
         const std::list<boost::asio::ip::address>& resolvers)
 {
-    typedef std::set<boost::asio::ip::address> IpAddresses;
-    typedef std::map<std::string, IpAddresses> IpAddressesOfNameservers;
-    typedef std::map<std::string, Nameservers> DomainNameservers;
-    typedef std::map<boost::asio::ip::address, DomainNameservers> IpAddressesToDomainNameservers;
+    using IpAddresses = std::set<boost::asio::ip::address>;
+    using IpAddressesOfNameservers = std::map<std::string, IpAddresses>;
+    using DomainNameservers = std::map<std::string, Nameservers>;
+    using IpAddressesToDomainNameservers = std::map<boost::asio::ip::address, DomainNameservers>;
     const Nameservers nameservers = domains_to_scan.get_nameservers();
     const auto nameserver_addresses = HostnameResolver::get_result(
             nameservers,
@@ -575,7 +575,7 @@ VectorOfInsecures resolve_hostnames_of_nameservers(
          nameserver_itr != nameserver_addresses.end(); ++nameserver_itr)
     {
         const std::string nameserver = nameserver_itr->first;
-        const Domains domains = domains_to_scan.get_unsigned_domains_of(nameserver);
+        const Domains domains = domains_to_scan.get_insecure_domains_of(nameserver);
         for (IpAddresses::const_iterator address_itr = nameserver_itr->second.begin();
              address_itr != nameserver_itr->second.end(); ++address_itr)
         {
@@ -615,23 +615,23 @@ VectorOfInsecures resolve_hostnames_of_nameservers(
 Nameservers DomainsToScan::get_nameservers()const
 {
     Nameservers nameservers;
-    for (DomainsOfNamserver::const_iterator nameserver_itr = unsigned_domains_of_namserver_.begin();
-         nameserver_itr != unsigned_domains_of_namserver_.end(); ++nameserver_itr)
+    for (DomainsOfNamserver::const_iterator nameserver_itr = insecure_domains_of_namserver_.begin();
+         nameserver_itr != insecure_domains_of_namserver_.end(); ++nameserver_itr)
     {
         nameservers.insert(nameserver_itr->first);
     }
     return nameservers;
 }
 
-const Domains& DomainsToScan::get_signed_domains()const
+const Domains& DomainsToScan::get_secure_domains()const
 {
-    return signed_domains_;
+    return secure_domains_;
 }
 
-Domains DomainsToScan::get_unsigned_domains_of(const std::string& _nameserver)const
+Domains DomainsToScan::get_insecure_domains_of(const std::string& _nameserver)const
 {
-    const DomainsOfNamserver::const_iterator nameserver_itr = unsigned_domains_of_namserver_.find(_nameserver);
-    const bool nameserver_found = nameserver_itr != unsigned_domains_of_namserver_.end();
+    const DomainsOfNamserver::const_iterator nameserver_itr = insecure_domains_of_namserver_.find(_nameserver);
+    const bool nameserver_found = nameserver_itr != insecure_domains_of_namserver_.end();
     if (nameserver_found)
     {
         return nameserver_itr->second;

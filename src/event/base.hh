@@ -78,7 +78,7 @@ Base::Result Base::operator()(Loop::Flag<Tags> ...flags)
 class TimeoutEvent
 {
 public:
-    TimeoutEvent(Base& base, event_callback_fn on_timeout);
+    TimeoutEvent(Base& base, ::event_callback_fn on_timeout);
     ~TimeoutEvent();
     TimeoutEvent& set(std::chrono::microseconds timeout);
     TimeoutEvent& remove();

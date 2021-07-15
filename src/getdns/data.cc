@@ -20,18 +20,16 @@
 #include "src/getdns/data.hh"
 #include "src/getdns/exception.hh"
 
-#include <boost/variant.hpp>
-#include <boost/version.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
-#include <boost/archive/iterators/transform_width.hpp>
 #include <boost/archive/iterators/ostream_iterator.hpp>
-#include <boost/algorithm/string.hpp>
-
-#include <iostream>
+#include <boost/archive/iterators/transform_width.hpp>
+#include <boost/version.hpp>
 
 #include <algorithm>
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <sstream>
 

@@ -145,11 +145,9 @@ abort_if_headers_not_found(
     boost/algorithm/string.hpp
     boost/algorithm/string/predicate.hpp
     boost/algorithm/string/split.hpp
-    #boost/asio/ip/address.hpp
+    boost/asio/ip/address.hpp
     boost/lexical_cast.hpp
-    boost/optional.hpp
-    boost/variant.hpp
-    boost/variant/variant.hpp)
+    boost/optional.hpp)
 
 include(CheckFunctionExists)
 function(abort_if_functions_not_found function_name)
@@ -200,12 +198,17 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/.git AND GIT_PROGRAM)
         add_custom_target(dist
             COMMAND ${GIT_PROGRAM} archive --format=tar --prefix=${PACKAGE_TARNAME}/ HEAD > ${CMAKE_BINARY_DIR}/.${PACKAGE_TARNAME}.tar
             COMMAND tar --concatenate --file=${CMAKE_BINARY_DIR}/.${PACKAGE_TARNAME}.tar ${CMAKE_BINARY_DIR}/.getdns.tar
+            COMMAND rm ${CMAKE_BINARY_DIR}/.getdns.tar
             COMMAND tar --concatenate --file=${CMAKE_BINARY_DIR}/.${PACKAGE_TARNAME}.tar ${CMAKE_BINARY_DIR}/.getdns_jsmn.tar
+            COMMAND rm ${CMAKE_BINARY_DIR}/.getdns_jsmn.tar
             COMMAND tar --concatenate --file=${CMAKE_BINARY_DIR}/.${PACKAGE_TARNAME}.tar ${CMAKE_BINARY_DIR}/.getdns_ssl_dane.tar
+            COMMAND rm ${CMAKE_BINARY_DIR}/.getdns_ssl_dane.tar
             COMMAND tar --concatenate --file=${CMAKE_BINARY_DIR}/.${PACKAGE_TARNAME}.tar ${CMAKE_BINARY_DIR}/.getdns_yxml.tar
+            COMMAND rm ${CMAKE_BINARY_DIR}/.getdns_yxml.tar
             COMMAND tar --concatenate --file=${CMAKE_BINARY_DIR}/.${PACKAGE_TARNAME}.tar ${CMAKE_BINARY_DIR}/.getdns_stubby.tar
+            COMMAND rm ${CMAKE_BINARY_DIR}/.getdns_stubby.tar
             COMMAND cat ${CMAKE_BINARY_DIR}/.${PACKAGE_TARNAME}.tar | gzip > ${CMAKE_BINARY_DIR}/${PACKAGE_TARNAME}.tar.gz
-            COMMAND rm ${CMAKE_BINARY_DIR}/.${PACKAGE_TARNAME}.tar ${CMAKE_BINARY_DIR}/.getdns.tar ${CMAKE_BINARY_DIR}/.getdns_jsmn.tar ${CMAKE_BINARY_DIR}/.getdns_ssl_dane.tar ${CMAKE_BINARY_DIR}/.getdns_yxml.tar ${CMAKE_BINARY_DIR}/.getdns_stubby.tar
+            COMMAND rm ${CMAKE_BINARY_DIR}/.${PACKAGE_TARNAME}.tar
             DEPENDS dist_getdns dist_getdns_jsmn dist_getdns_ssl_dane dist_getdns_yxml dist_getdns_stubby
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     endif()

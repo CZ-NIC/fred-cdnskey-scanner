@@ -27,8 +27,8 @@
 
 #include "src/time_unit.hh"
 
-#include "src/util/pipe.hh"
 #include "src/util/fork.hh"
+#include "src/util/pipe.hh"
 
 #include <cstring>
 #include <iostream>
@@ -410,7 +410,7 @@ private:
         char buffer[0x10000];
         while (true)
         {
-            static const ::ssize_t failure = -1;
+            static constexpr ::ssize_t failure = -1;
             const auto read_retval = ::read(source_.get_descriptor(), buffer, sizeof(buffer));
             const bool read_failed = (read_retval == failure);
             if (!read_failed)
@@ -594,7 +594,7 @@ HostnameResolver::Result HostnameResolver::get_result(
                     std::cerr << "hostnames A and AAAA records resolved" << std::endl;
                     if ((resolved.size() + unresolved.size()) < hostnames.size())
                     {
-                        throw std::runtime_error("hostname resolver doesn't completed its job");
+                        throw std::runtime_error("hostname resolver did not complete it's job");
                     }
                     return resolved;
                 }

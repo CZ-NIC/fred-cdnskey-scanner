@@ -22,16 +22,14 @@
 
 #include "src/getdns/exception.hh"
 
-#include <getdns/getdns.h>
-
 #include <boost/asio/ip/address.hpp>
+
+#include <getdns/getdns.h>
 
 #include <cstdlib>
 #include <iosfwd>
 #include <list>
-#include <set>
 #include <string>
-#include <set>
 #include <type_traits>
 
 namespace GetDns {

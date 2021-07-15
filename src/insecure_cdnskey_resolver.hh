@@ -26,8 +26,8 @@
 #include <boost/asio/ip/address.hpp>
 
 #include <chrono>
-#include <string>
 #include <set>
+#include <string>
 #include <vector>
 
 struct Insecure

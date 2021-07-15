@@ -20,18 +20,18 @@
 #ifndef SOLVER_HH_3439EE166EAD8E6EF02E3D57784D4800//date "+%s"|md5sum|tr "[a-f]" "[A-F]"
 #define SOLVER_HH_3439EE166EAD8E6EF02E3D57784D4800
 
+#include "src/event/base.hh"
+
 #include "src/getdns/context.hh"
 #include "src/getdns/data.hh"
 
-#include "src/event/base.hh"
+#include <boost/optional.hpp>
 
 #include <getdns/getdns.h>
 
-#include <boost/optional.hpp>
-
 #include <iostream>
-#include <map>
 #include <list>
+#include <map>
 #include <utility>
 
 namespace GetDns {
@@ -42,13 +42,17 @@ class Solver
 public:
     explicit Solver() noexcept;
     ~Solver() = default;
+
+    using ListOfQueries = std::list<Query>;
+
     ::getdns_transaction_t add_request(Query query);
     Solver& do_one_step();
     std::size_t get_number_of_unresolved_requests() const noexcept;
-    using ListOfQueries = std::list<Query>;
     ListOfQueries pop_finished_requests();
     Event::Base& get_event_base();
 private:
+    using QueryByTransactionId = std::map<::getdns_transaction_t, Query>;
+
     static void getdns_callback_function(
             ::getdns_context*,
             ::getdns_callback_type_t,
@@ -56,7 +60,6 @@ private:
             void*,
             ::getdns_transaction_t) noexcept;
     Event::Base event_base_;
-    using QueryByTransactionId = std::map<::getdns_transaction_t, Query>;
     QueryByTransactionId active_requests_;
     ListOfQueries finished_requests_;
 };
