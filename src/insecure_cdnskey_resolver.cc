@@ -34,8 +34,8 @@
 
 #include <algorithm>
 #include <iostream>
-#include <string>
 #include <set>
+#include <string>
 
 namespace {
 
