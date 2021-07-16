@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2018  CZ.NIC, z. s. p. o.
+ * Copyright (C) 2017-2021  CZ.NIC, z. s. p. o.
  *
  * This file is part of FRED.
  *
@@ -16,61 +16,66 @@
  * You should have received a copy of the GNU General Public License
  * along with FRED.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 #ifndef CONTEXT_HH_0C2292206DE22FFE81940C3E7D4DE456//date "+%s"|md5sum|tr "[a-f]" "[A-F]"
 #define CONTEXT_HH_0C2292206DE22FFE81940C3E7D4DE456
 
-#include "src/event/base.hh"
 #include "src/getdns/data.hh"
 #include "src/getdns/transport.hh"
-#include "src/getdns/extensions.hh"
+#include "src/getdns/extensions_set.hh"
+
+#include "src/event/base.hh"
+
+#include "src/time_unit.hh"
 
 #include <getdns/getdns.h>
 
-#include <cstdint>
-#include <list>
-#include <memory>
-#include <string>
-
 #include <boost/asio/ip/address.hpp>
 
-namespace GetDns
-{
+#include <cstdint>
+#include <list>
+#include <string>
+
+
+namespace GetDns {
 
 class Context
 {
 public:
+    Context(Context&& src);
     Context(const Context&) = delete;
+    Context& operator=(Context&& src);
     Context& operator=(const Context&) = delete;
-    enum class InitialSettings
+    struct InitialSettings
     {
-        none,
-        from_os,
+        template <typename T> struct Item { };
+        using None = Item<struct None_>;
+        using FromOs = Item<struct FromOs_>;
     };
-    Context(Event::Base& _event_base, InitialSettings _initial_settings);
+    explicit Context(InitialSettings::FromOs);
+    explicit Context(InitialSettings::None);
+    explicit Context(::getdns_context* ptr);
     ~Context();
-    ::getdns_transaction_t add_request_for_address_resolving(
-            const std::string& _hostname,
-            void* _user_data_ptr,
-            ::getdns_callback_t _on_event,
-            Extensions _extensions);
-    ::getdns_transaction_t add_request_for_cdnskey_resolving(
-            const std::string& _domain,
-            void* _user_data_ptr,
-            ::getdns_callback_t _on_event,
-            Extensions _extensions);
-    Context& set_dns_transport_list(const TransportList& _transport_list);
-    Context& set_upstream_recursive_servers(const std::list<boost::asio::ip::address>& _servers);
-    Context& set_follow_redirects(bool _yes);
-    Context& set_timeout(std::uint64_t _value_ms);
-    Context& set_dnssec_trust_anchors(const std::list<Data::TrustAnchor>& _anchors);
-    ::getdns_context* release_context();
+    template <typename ...Ts>
+    Context& set_dns_transport_list(TransportsList<Ts...> transport_list);
+    Context& set_upstream_recursive_servers(const std::list<boost::asio::ip::address>& servers);
+    Context& set_follow_redirects(bool yes);
+    using Timeout = TimeUnit::Milliseconds<struct TimeoutTag_>;
+    Context& set_timeout(Timeout value);
+    Context& set_dnssec_trust_anchors(Data::TrustAnchorList anchors);
+    Context& set_libevent_base(Event::Base& event_base);
+    operator ::getdns_context*();
 private:
-    struct Deleter
-    {
-        void operator()(::getdns_context*)const;
-    };
-    std::unique_ptr<::getdns_context, Deleter> context_ptr_;
+    Context& set_dns_transport_list(std::size_t count, ::getdns_transport_list_t* transports);
+    ::getdns_context* ptr_;
 };
+
+template <typename ...Ts>
+Context& Context::set_dns_transport_list(TransportsList<Ts...> protocols)
+{
+    auto transport_list = make_transports_list(protocols);
+    return this->set_dns_transport_list(transport_list.size(), transport_list.data());
+}
 
 }//namespace GetDns
 

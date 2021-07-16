@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2018  CZ.NIC, z. s. p. o.
+ * Copyright (C) 2017-2021  CZ.NIC, z. s. p. o.
  *
  * This file is part of FRED.
  *
@@ -16,19 +16,31 @@
  * You should have received a copy of the GNU General Public License
  * along with FRED.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 #include "src/hostname_resolver.hh"
 #include "src/insecure_cdnskey_resolver.hh"
 #include "src/secure_cdnskey_resolver.hh"
 #include "src/time_unit.hh"
 
-#include "src/getdns/data.hh"
 #include "src/getdns/context.hh"
-#include "src/getdns/solver.hh"
+#include "src/getdns/data.hh"
 #include "src/getdns/exception.hh"
-#include "src/getdns/error.hh"
+#include "src/getdns/solver.hh"
+
+#include <boost/asio/ip/address.hpp>
+#include <boost/optional.hpp>
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/classification.hpp>
+#include <boost/algorithm/string/split.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include <sys/time.h>
 #include <sys/resource.h>
+
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
 
 #include <algorithm>
 #include <iostream>
@@ -41,36 +53,24 @@
 #include <string>
 #include <vector>
 
-#include <cerrno>
-#include <cmath>
-#include <cstdlib>
-#include <cstring>
-
-#include <boost/asio/ip/address.hpp>
-#include <boost/optional.hpp>
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/lexical_cast.hpp>
-
 namespace {
 
-typedef std::set<std::string> Nameservers;
-typedef std::set<std::string> Domains;
+using Nameservers = std::set<std::string>;
+using Domains = std::set<std::string>;
 
 class DomainsToScan
 {
 public:
-    DomainsToScan(std::istream& _data_source);
-    ~DomainsToScan();
-    std::size_t get_number_of_nameservers()const;
-    std::size_t get_number_of_domains()const;
-    std::size_t get_number_of_secure_domains()const;
-    Nameservers get_nameservers()const;
-    const Domains& get_signed_domains()const;
-    Domains get_unsigned_domains_of(const std::string& _nameserver)const;
+    DomainsToScan(std::istream& data_source);
+    ~DomainsToScan() = default;
+    std::size_t get_number_of_nameservers() const;
+    std::size_t get_number_of_domains() const;
+    std::size_t get_number_of_secure_domains() const;
+    Nameservers get_nameservers() const;
+    const Domains& get_secure_domains() const;
+    Domains get_insecure_domains_of(const std::string& nameserver) const;
 private:
-    DomainsToScan& append_data(const char* _data_chunk, std::streamsize _data_chunk_length);
+    DomainsToScan& append_data(const char* data_chunk, std::streamsize data_chunk_length);
     void data_finished();
     enum class Section
     {
@@ -78,28 +78,26 @@ private:
         secure,
         insecure,
     } section_;
-    typedef std::map<std::string, Domains> DomainsOfNamserver;
-    DomainsOfNamserver unsigned_domains_of_namserver_;
+    using DomainsOfNamserver = std::map<std::string, Domains>;
+    DomainsOfNamserver insecure_domains_of_namserver_;
     std::string nameserver_;
-    Domains signed_domains_;
-    Domains unsigned_domains_;
+    Domains secure_domains_;
+    Domains insecure_domains_;
     std::string rest_of_data_;
     bool data_starts_at_new_line_;
 };
 
-void resolve_hostnames_of_nameservers(
+VectorOfInsecures resolve_hostnames_of_nameservers(
         const DomainsToScan& domains_to_scan,
-        const TimeUnit::Seconds& query_timeout_sec,
-        const TimeUnit::Nanoseconds& runtime_nsec,
-        const boost::optional<GetDns::TransportList>& transport_list,
-        const std::list<boost::asio::ip::address>& resolvers,
-        VectorOfInsecures& result);
+        GetDns::Context::Timeout query_timeout,
+        std::chrono::nanoseconds runtime,
+        const std::list<boost::asio::ip::address>& resolvers);
 
 template <class T>
 T split(const std::string& src, const std::string& delimiters, void(*append)(const std::string& item, T& container));
 
 void append_ip_address(const std::string& item, std::list<boost::asio::ip::address>& addresses);
-void append_trust_anchor(const std::string& item, std::list<GetDns::Data::TrustAnchor>& anchors);
+void append_trust_anchor(const std::string& item, std::list<GetDns::TrustAnchor>& anchors);
 
 extern const char cmdline_help_text[];
 
@@ -110,7 +108,7 @@ int main(int argc, char* argv[])
     if ((argc <= 0) || (argv[0] == nullptr))
     {
         std::cerr << "main() arguments are crazy" << std::endl;
-        return EXIT_SUCCESS;
+        return EXIT_FAILURE;
     }
     std::string hostname_resolvers_opt;
     std::string cdnskey_resolvers_opt;
@@ -121,7 +119,7 @@ int main(int argc, char* argv[])
     char** arg_ptr = argv + 1;
     while ((arg_ptr != arg_end) && (*arg_ptr != nullptr))
     {
-        const int are_the_same = 0;
+        static constexpr int are_the_same = 0;
         if (std::strcmp(*arg_ptr, "--hostname_resolvers") == are_the_same)
         {
             if (!hostname_resolvers_opt.empty())
@@ -235,8 +233,8 @@ int main(int argc, char* argv[])
     }
     try
     {
-        const TimeUnit::Seconds runtime(boost::lexical_cast<std::int64_t>(runtime_opt));
-        if (runtime.value <= 0)
+        const auto runtime = std::chrono::seconds{boost::lexical_cast<std::int64_t>(runtime_opt)};
+        if (runtime <= std::chrono::seconds{0})
         {
             std::cerr << "lack of time" << std::endl;
             return EXIT_FAILURE;
@@ -276,40 +274,33 @@ int main(int argc, char* argv[])
         }
         const std::list<boost::asio::ip::address> hostname_resolvers = split(hostname_resolvers_opt, ",", append_ip_address);
         const std::list<boost::asio::ip::address> cdnskey_resolvers = split(cdnskey_resolvers_opt, ",", append_ip_address);
-        const std::list<GetDns::Data::TrustAnchor> anchors = split(dnssec_trust_anchors_opt, ",", append_trust_anchor);
-        const TimeUnit::Seconds timeout_default(10);
-        const TimeUnit::Seconds query_timeout = timeout_opt.empty() ? timeout_default
-                                                          : TimeUnit::Seconds(boost::lexical_cast<std::uint64_t>(timeout_opt));
+        const std::list<GetDns::TrustAnchor> anchors = split(dnssec_trust_anchors_opt, ",", append_trust_anchor);
+        static constexpr auto timeout_default = std::chrono::seconds{10};
+        const auto query_timeout = GetDns::Context::Timeout{timeout_opt.empty() ? timeout_default
+                                                                                : std::chrono::seconds{boost::lexical_cast<std::uint64_t>(timeout_opt)}};
         const DomainsToScan domains_to_scan(std::cin);
         if ((domains_to_scan.get_number_of_nameservers() <= 0) &&
             (domains_to_scan.get_number_of_secure_domains() <= 0))
         {
             return EXIT_SUCCESS;
         }
-        const struct ::timespec t_end = TimeUnit::get_clock_monotonic() + runtime;
-        GetDns::TransportList tcp_only;
-        tcp_only.push_back(GetDns::TransportProtocol::tcp);
-        GetDns::TransportList udp_first;
-        udp_first.push_back(GetDns::TransportProtocol::udp);
-        udp_first.push_back(GetDns::TransportProtocol::tcp);
+        const auto t_end = std::chrono::nanoseconds{TimeUnit::get_uptime().get() + runtime};
         VectorOfInsecures insecure_queries;
         {
             const std::size_t estimated_total_number_of_queries =
                     domains_to_scan.get_number_of_nameservers() + 2 * domains_to_scan.get_number_of_domains();
             std::cerr << "estimated_total_number_of_queries = " << estimated_total_number_of_queries << std::endl;
-            const double query_distance = double(runtime.value) / estimated_total_number_of_queries;
+            const auto query_distance = static_cast<double>(runtime.count()) / estimated_total_number_of_queries;
             std::cerr << "query_distance = " << query_distance << std::endl;
             const std::size_t queries_to_ask_now = domains_to_scan.get_number_of_nameservers();
             std::cerr << "queries_to_ask_now = " << queries_to_ask_now << std::endl;
-            const TimeUnit::Nanoseconds time_for_hostname_resolver(query_distance * queries_to_ask_now * 1000000000LL);
-            std::cerr << "time_for_hostname_resolver = " << time_for_hostname_resolver.value << "ns" << std::endl;
-            resolve_hostnames_of_nameservers(
+            const auto time_for_hostname_resolver = std::chrono::nanoseconds{static_cast<std::int64_t>(query_distance * queries_to_ask_now * 1000000000LL)};
+            std::cerr << "time_for_hostname_resolver = " << time_for_hostname_resolver.count() << "ns" << std::endl;
+            insecure_queries = resolve_hostnames_of_nameservers(
                     domains_to_scan,
                     query_timeout,
                     time_for_hostname_resolver,
-                    udp_first,
-                    hostname_resolvers,
-                    insecure_queries);
+                    hostname_resolvers);
         }
         const std::size_t number_of_insecure_queries = insecure_queries.size();
         std::cerr << "number_of_insecure_queries = " << number_of_insecure_queries << std::endl;
@@ -317,38 +308,31 @@ int main(int argc, char* argv[])
         std::cerr << "number_of_secure_queries = " << number_of_secure_queries << std::endl;
         const std::size_t total_number_of_queries = number_of_insecure_queries + number_of_secure_queries;
         const std::size_t max_number_of_queries_per_second = 1000;
-        const TimeUnit::Nanoseconds min_runtime(total_number_of_queries / (max_number_of_queries_per_second / 1.0e+9));
-        TimeUnit::Nanoseconds time_to_the_end = t_end - TimeUnit::get_clock_monotonic();
-        if (time_to_the_end.value < min_runtime.value)
+        const auto min_runtime = std::chrono::nanoseconds{static_cast<std::int64_t>(total_number_of_queries / (max_number_of_queries_per_second / 1.0e+9))};
+        auto time_to_the_end = t_end - TimeUnit::get_uptime().get();
+        if (time_to_the_end < min_runtime)
         {
             time_to_the_end = min_runtime;
         }
-        const double query_distance_nsec = double(time_to_the_end.value) / total_number_of_queries;
+        const double query_distance_nsec = double(time_to_the_end.count()) / total_number_of_queries;
         std::cerr << "query_distance = " << query_distance_nsec << "ns" << std::endl;
-        const TimeUnit::Nanoseconds time_for_insecure_resolver(std::llround(query_distance_nsec * number_of_insecure_queries));
-        const TimeUnit::Nanoseconds time_for_secure_resolver(std::llround(query_distance_nsec * number_of_secure_queries));
+        const auto time_for_insecure_resolver = std::chrono::nanoseconds{static_cast<std::int64_t>(std::llround(query_distance_nsec * number_of_insecure_queries))};
+        const auto time_for_secure_resolver = std::chrono::nanoseconds{static_cast<std::int64_t>(std::llround(query_distance_nsec * number_of_secure_queries))};
         InsecureCdnskeyResolver::resolve(
                 insecure_queries,
                 query_timeout,
-                tcp_only,
                 time_for_insecure_resolver);
         SecureCdnskeyResolver::resolve(
-                domains_to_scan.get_signed_domains(),
+                domains_to_scan.get_secure_domains(),
                 query_timeout,
-                udp_first,
                 cdnskey_resolvers,
-                anchors,
+                GetDns::Data::TrustAnchorList{anchors},
                 time_for_secure_resolver);
         return EXIT_SUCCESS;
     }
     catch (const Event::Exception& e)
     {
         std::cerr << "caught Event::Exception: " << e.what() << std::endl;
-        return EXIT_FAILURE;
-    }
-    catch (const GetDns::Error& e)
-    {
-        std::cerr << "caught GetDns::Error: " << e.what() << std::endl;
         return EXIT_FAILURE;
     }
     catch (const GetDns::Exception& e)
@@ -370,58 +354,54 @@ int main(int argc, char* argv[])
 
 namespace {
 
-DomainsToScan::DomainsToScan(std::istream& _data_source)
-    : section_(Section::none),
-      data_starts_at_new_line_(true)
+DomainsToScan::DomainsToScan(std::istream& data_source)
+    : section_{Section::none},
+      data_starts_at_new_line_{true}
 {
-    while (!_data_source.eof())
+    while (!data_source.eof())
     {
-        const bool stdin_is_broken = !_data_source;
+        const bool stdin_is_broken = !data_source;
         if (stdin_is_broken)
         {
             throw std::runtime_error("stream is broken");
         }
         char data_chunk[0x10000];
-        _data_source.read(data_chunk, sizeof(data_chunk));
-        const std::streamsize data_chunk_length = _data_source.gcount();
+        data_source.read(data_chunk, sizeof(data_chunk));
+        const std::streamsize data_chunk_length = data_source.gcount();
         this->append_data(data_chunk, data_chunk_length);
     }
     this->data_finished();
 }
 
-DomainsToScan::~DomainsToScan()
+std::size_t DomainsToScan::get_number_of_nameservers() const
 {
+    return insecure_domains_of_namserver_.size();
 }
 
-std::size_t DomainsToScan::get_number_of_nameservers()const
+std::size_t DomainsToScan::get_number_of_domains() const
 {
-    return unsigned_domains_of_namserver_.size();
-}
-
-std::size_t DomainsToScan::get_number_of_domains()const
-{
-    std::size_t sum_count = signed_domains_.size();
-    for (DomainsOfNamserver::const_iterator itr = unsigned_domains_of_namserver_.begin();
-         itr != unsigned_domains_of_namserver_.end(); ++itr)
+    std::size_t sum_count = secure_domains_.size();
+    for (DomainsOfNamserver::const_iterator itr = insecure_domains_of_namserver_.begin();
+         itr != insecure_domains_of_namserver_.end(); ++itr)
     {
         sum_count += itr->second.size();
     }
     return sum_count;
 }
 
-std::size_t DomainsToScan::get_number_of_secure_domains()const
+std::size_t DomainsToScan::get_number_of_secure_domains() const
 {
-    return signed_domains_.size();
+    return secure_domains_.size();
 }
 
-const char section_of_signed_domains[] = "[secure]";
-const char section_of_unsigned_domains[] = "[insecure]";
+constexpr auto section_of_secure_domains = "[secure]";
+constexpr auto section_of_insecure_domains = "[insecure]";
 
-DomainsToScan& DomainsToScan::append_data(const char* _data_chunk, std::streamsize _data_chunk_length)
+DomainsToScan& DomainsToScan::append_data(const char* data_chunk, std::streamsize data_chunk_length)
 {
-    const char* const data_end = _data_chunk + _data_chunk_length;
-    const char* item_begin = _data_chunk;
-    const char* current_pos = _data_chunk;
+    const char* const data_end = data_chunk + data_chunk_length;
+    const char* item_begin = data_chunk;
+    const char* current_pos = data_chunk;
     while (current_pos < data_end)
     {
         static const char item_delimiter = ' ';
@@ -440,23 +420,23 @@ DomainsToScan& DomainsToScan::append_data(const char* _data_chunk, std::streamsi
         const bool check_section_flag = data_starts_at_new_line_ && line_end_reached;
         if (check_section_flag)
         {
-            const bool section_of_signed_domains_reached = item == section_of_signed_domains;
-            if (section_of_signed_domains_reached)
+            const bool section_of_secure_domains_reached = item == section_of_secure_domains;
+            if (section_of_secure_domains_reached)
             {
                 section_ = Section::secure;
                 nameserver_.clear();
-                unsigned_domains_.clear();
+                insecure_domains_.clear();
                 data_starts_at_new_line_ = true;
                 ++current_pos;
                 item_begin = current_pos;
                 continue;
             }
-            const bool section_of_unsigned_domains_reached = item == section_of_unsigned_domains;
-            if (section_of_unsigned_domains_reached)
+            const bool section_of_insecure_domains_reached = item == section_of_insecure_domains;
+            if (section_of_insecure_domains_reached)
             {
                 section_ = Section::insecure;
                 nameserver_.clear();
-                unsigned_domains_.clear();
+                insecure_domains_.clear();
                 data_starts_at_new_line_ = true;
                 ++current_pos;
                 item_begin = current_pos;
@@ -468,7 +448,7 @@ DomainsToScan& DomainsToScan::append_data(const char* _data_chunk, std::streamsi
             case Section::secure:
                 if (!item.empty())
                 {
-                    signed_domains_.insert(item);
+                    secure_domains_.insert(item);
                 }
                 else
                 {
@@ -486,13 +466,13 @@ DomainsToScan& DomainsToScan::append_data(const char* _data_chunk, std::streamsi
                     }
                     nameserver_ = item;
                     data_starts_at_new_line_ = false;
-                    unsigned_domains_.clear();
+                    insecure_domains_.clear();
                 }
                 else
                 {
                     if (!item.empty())
                     {
-                        unsigned_domains_.insert(item);
+                        insecure_domains_.insert(item);
                     }
                     else
                     {
@@ -507,13 +487,13 @@ DomainsToScan& DomainsToScan::append_data(const char* _data_chunk, std::streamsi
         if (line_end_reached)
         {
             const bool nameserver_data_available =
-                    (section_ == Section::insecure) && !nameserver_.empty() && !unsigned_domains_.empty();
+                    (section_ == Section::insecure) && !nameserver_.empty() && !insecure_domains_.empty();
             if (nameserver_data_available)
             {
-                unsigned_domains_of_namserver_.insert(std::make_pair(nameserver_, unsigned_domains_));
+                insecure_domains_of_namserver_.insert(std::make_pair(nameserver_, insecure_domains_));
             }
             nameserver_.clear();
-            unsigned_domains_.clear();
+            insecure_domains_.clear();
             data_starts_at_new_line_ = true;
         }
         ++current_pos;
@@ -530,13 +510,13 @@ void DomainsToScan::data_finished()
     const bool check_section_flag = data_starts_at_new_line_;
     if (check_section_flag)
     {
-        const bool section_of_signed_domains_reached = item == section_of_signed_domains;
-        if (section_of_signed_domains_reached)
+        const bool section_of_secure_domains_reached = item == section_of_secure_domains;
+        if (section_of_secure_domains_reached)
         {
             return;
         }
-        const bool section_of_unsigned_domains_reached = item == section_of_unsigned_domains;
-        if (section_of_unsigned_domains_reached)
+        const bool section_of_insecure_domains_reached = item == section_of_insecure_domains;
+        if (section_of_insecure_domains_reached)
         {
             return;
         }
@@ -546,7 +526,7 @@ void DomainsToScan::data_finished()
         case Section::secure:
             if (!item.empty())
             {
-                signed_domains_.insert(item);
+                secure_domains_.insert(item);
             }
             return;
         case Section::insecure:
@@ -556,15 +536,15 @@ void DomainsToScan::data_finished()
             {
                 if (!item.empty())
                 {
-                    unsigned_domains_.insert(item);
+                    insecure_domains_.insert(item);
                 }
-                const bool nameserver_data_available = !nameserver_.empty() && !unsigned_domains_.empty();
+                const bool nameserver_data_available = !nameserver_.empty() && !insecure_domains_.empty();
                 if (nameserver_data_available)
                 {
-                    unsigned_domains_of_namserver_.insert(std::make_pair(nameserver_, unsigned_domains_));
+                    insecure_domains_of_namserver_.insert(std::make_pair(nameserver_, insecure_domains_));
                 }
                 nameserver_.clear();
-                unsigned_domains_.clear();
+                insecure_domains_.clear();
             }
             return;
         }
@@ -573,32 +553,29 @@ void DomainsToScan::data_finished()
     }
 }
 
-void resolve_hostnames_of_nameservers(
+VectorOfInsecures resolve_hostnames_of_nameservers(
         const DomainsToScan& domains_to_scan,
-        const TimeUnit::Seconds& query_timeout_sec,
-        const TimeUnit::Nanoseconds& runtime_nsec,
-        const boost::optional<GetDns::TransportList>& transport_list,
-        const std::list<boost::asio::ip::address>& resolvers,
-        VectorOfInsecures& result)
+        GetDns::Context::Timeout query_timeout,
+        std::chrono::nanoseconds runtime,
+        const std::list<boost::asio::ip::address>& resolvers)
 {
-    typedef std::set<boost::asio::ip::address> IpAddresses;
-    typedef std::map<std::string, IpAddresses> IpAddressesOfNameservers;
-    typedef std::map<std::string, Nameservers> DomainNameservers;
-    typedef std::map<boost::asio::ip::address, DomainNameservers> IpAddressesToDomainNameservers;
+    using IpAddresses = std::set<boost::asio::ip::address>;
+    using IpAddressesOfNameservers = std::map<std::string, IpAddresses>;
+    using DomainNameservers = std::map<std::string, Nameservers>;
+    using IpAddressesToDomainNameservers = std::map<boost::asio::ip::address, DomainNameservers>;
     const Nameservers nameservers = domains_to_scan.get_nameservers();
-    const HostnameResolver::Result nameserver_addresses = HostnameResolver::get_result(
+    const auto nameserver_addresses = HostnameResolver::get_result(
             nameservers,
-            query_timeout_sec,
-            transport_list,
+            query_timeout,
             resolvers,
-            runtime_nsec);
+            runtime);
 
     IpAddressesToDomainNameservers addresses_to_domains;
     for (IpAddressesOfNameservers::const_iterator nameserver_itr = nameserver_addresses.begin();
          nameserver_itr != nameserver_addresses.end(); ++nameserver_itr)
     {
         const std::string nameserver = nameserver_itr->first;
-        const Domains domains = domains_to_scan.get_unsigned_domains_of(nameserver);
+        const Domains domains = domains_to_scan.get_insecure_domains_of(nameserver);
         for (IpAddresses::const_iterator address_itr = nameserver_itr->second.begin();
              address_itr != nameserver_itr->second.end(); ++address_itr)
         {
@@ -616,7 +593,7 @@ void resolve_hostnames_of_nameservers(
     {
         number_of_items += address_itr->second.size();
     }
-    result.clear();
+    VectorOfInsecures result;
     result.reserve(number_of_items);
     for (IpAddressesToDomainNameservers::const_iterator address_itr = addresses_to_domains.begin();
          address_itr != addresses_to_domains.end(); ++address_itr)
@@ -632,28 +609,29 @@ void resolve_hostnames_of_nameservers(
         }
     }
     std::shuffle(result.begin(), result.end(), std::mt19937(std::random_device()()));
+    return result;
 }
 
 Nameservers DomainsToScan::get_nameservers()const
 {
     Nameservers nameservers;
-    for (DomainsOfNamserver::const_iterator nameserver_itr = unsigned_domains_of_namserver_.begin();
-         nameserver_itr != unsigned_domains_of_namserver_.end(); ++nameserver_itr)
+    for (DomainsOfNamserver::const_iterator nameserver_itr = insecure_domains_of_namserver_.begin();
+         nameserver_itr != insecure_domains_of_namserver_.end(); ++nameserver_itr)
     {
         nameservers.insert(nameserver_itr->first);
     }
     return nameservers;
 }
 
-const Domains& DomainsToScan::get_signed_domains()const
+const Domains& DomainsToScan::get_secure_domains()const
 {
-    return signed_domains_;
+    return secure_domains_;
 }
 
-Domains DomainsToScan::get_unsigned_domains_of(const std::string& _nameserver)const
+Domains DomainsToScan::get_insecure_domains_of(const std::string& _nameserver)const
 {
-    const DomainsOfNamserver::const_iterator nameserver_itr = unsigned_domains_of_namserver_.find(_nameserver);
-    const bool nameserver_found = nameserver_itr != unsigned_domains_of_namserver_.end();
+    const DomainsOfNamserver::const_iterator nameserver_itr = insecure_domains_of_namserver_.find(_nameserver);
+    const bool nameserver_found = nameserver_itr != insecure_domains_of_namserver_.end();
     if (nameserver_found)
     {
         return nameserver_itr->second;
@@ -685,7 +663,7 @@ void append_ip_address(const std::string& item, std::list<boost::asio::ip::addre
     addresses.push_back(boost::asio::ip::address::from_string(item));
 }
 
-void append_trust_anchor(const std::string& item, std::list<GetDns::Data::TrustAnchor>& anchors)
+void append_trust_anchor(const std::string& item, std::list<GetDns::TrustAnchor>& anchors)
 {
     std::istringstream anchor_stream(item);
     std::string zone;
@@ -698,12 +676,12 @@ void append_trust_anchor(const std::string& item, std::list<GetDns::Data::TrustA
                   >> protocol
                   >> algorithm
                   >> base64_encoded_public_key;
-    GetDns::Data::TrustAnchor trust_anchor;
+    GetDns::TrustAnchor trust_anchor;
     trust_anchor.zone = zone;
     trust_anchor.flags = flags;
     trust_anchor.protocol = protocol;
     trust_anchor.algorithm = algorithm;
-    trust_anchor.public_key = GetDns::Data::base64_decode(base64_encoded_public_key);
+    trust_anchor.public_key = base64_encoded_public_key;
     anchors.push_back(trust_anchor);
 }
 

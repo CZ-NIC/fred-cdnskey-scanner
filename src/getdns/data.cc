@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2018  CZ.NIC, z. s. p. o.
+ * Copyright (C) 2017-2021  CZ.NIC, z. s. p. o.
  *
  * This file is part of FRED.
  *
@@ -16,457 +16,573 @@
  * You should have received a copy of the GNU General Public License
  * along with FRED.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 #include "src/getdns/data.hh"
 #include "src/getdns/exception.hh"
-#include "src/getdns/error.hh"
+
+#include <boost/algorithm/string.hpp>
+#include <boost/archive/iterators/base64_from_binary.hpp>
+#include <boost/archive/iterators/binary_from_base64.hpp>
+#include <boost/archive/iterators/ostream_iterator.hpp>
+#include <boost/archive/iterators/transform_width.hpp>
+#include <boost/version.hpp>
 
 #include <algorithm>
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <sstream>
 
-#include <boost/variant.hpp>
-#include <boost/version.hpp>
-#include <boost/archive/iterators/base64_from_binary.hpp>
-#include <boost/archive/iterators/binary_from_base64.hpp>
-#include <boost/archive/iterators/transform_width.hpp>
-#include <boost/archive/iterators/ostream_iterator.hpp>
-#include <boost/algorithm/string.hpp>
-
 namespace GetDns {
+
+PrettyString::PrettyString(char* src)
+    : data_{src}
+{ }
+
+PrettyString::~PrettyString()
+{
+    ::free(reinterpret_cast<void*>(data_));
+}
+
+std::ostream& operator<<(std::ostream& out, const PrettyString& str)
+{
+    return out << const_cast<const char*>(str.data_);
+}
+
+Data::BinDataRef::BinDataRef(const ::getdns_bindata* ptr)
+    : ptr_{ptr}
+{ }
+
+Data::BinDataRef::operator const ::getdns_bindata*() const noexcept
+{
+    return ptr_;
+}
+
+std::size_t Data::BinDataRef::size() const noexcept
+{
+    return ptr_->size;
+}
+
+const void* Data::BinDataRef::data() const noexcept
+{
+    return ptr_->data;
+}
 
 namespace {
 
-void dict_ptr_destroy(::getdns_dict** dict_ptr)
+struct Free
 {
-    if (dict_ptr != nullptr)
-    {
-        ::getdns_dict_destroy(*dict_ptr);
-        delete dict_ptr;
-    }
-}
-
-void list_ptr_destroy(::getdns_list** list_ptr)
-{
-    if (list_ptr != nullptr)
-    {
-        ::getdns_list_destroy(*list_ptr);
-        delete list_ptr;
-    }
-}
+    void operator()(void* mem) { ::free(mem); }
+};
 
 }//namespace GetDns::{anonymous}
 
-Data::Dict::Dict()
-    : base_ptr_(new ::getdns_dict*(::getdns_dict_create()), dict_ptr_destroy),
-      parent_(Empty())
+using String = std::unique_ptr<char, Free>;
+
+template <>
+boost::asio::ip::address Data::BinDataRef::as<boost::asio::ip::address>() const
 {
-    if (*base_ptr_ == nullptr)
+    const auto address = String{::getdns_display_ip_address(ptr_)};
+    return boost::asio::ip::make_address(address.get());
+}
+
+template <>
+boost::asio::ip::address_v4 Data::BinDataRef::as<boost::asio::ip::address_v4>() const
+{
+    const auto address = String{::getdns_display_ip_address(ptr_)};
+    return boost::asio::ip::make_address_v4(address.get());
+}
+
+template <>
+boost::asio::ip::address_v6 Data::BinDataRef::as<boost::asio::ip::address_v6>() const
+{
+    const auto address = String{::getdns_display_ip_address(ptr_)};
+    return boost::asio::ip::make_address_v6(address.get());
+}
+
+Data::DictRef::DictRef(const ::getdns_dict* ptr)
+    : ptr_{ptr}
+{ }
+
+Data::DictRef::DictRef(DictRef&& src) noexcept
+    : DictRef{nullptr}
+{
+    std::swap(src.ptr_, ptr_);
+}
+
+Data::DictRef& Data::DictRef::operator=(DictRef&& src) noexcept
+{
+    std::swap(src.ptr_, ptr_);
+    return *this;
+}
+
+Data::DictRef::operator const ::getdns_dict*() const noexcept
+{
+    return ptr_;
+}
+
+PrettyString Data::DictRef::get_pretty_string() const
+{
+    return PrettyString{::getdns_pretty_print_dict(ptr_)};
+}
+
+std::ostream& operator<<(std::ostream& out, const Data::DictRef& data)
+{
+    return out << data.get_pretty_string();
+}
+
+template <>
+Data::BinDataRef Data::DictRef::get<Data::BinDataRef>(const char* key) const
+{
+    ::getdns_bindata* bindata_ptr = nullptr;
+    MUST_BE_GOOD(::getdns_dict_get_bindata(ptr_, key, &bindata_ptr));
+    return BinDataRef{bindata_ptr};
+}
+
+template <>
+Data::DictRef Data::DictRef::get<Data::DictRef>(const char* key) const
+{
+    ::getdns_dict* dict_ptr = nullptr;
+    MUST_BE_GOOD(::getdns_dict_get_dict(ptr_, key, &dict_ptr));
+    return DictRef{dict_ptr};
+}
+
+template <>
+Data::IntegerRef Data::DictRef::get<Data::IntegerRef>(const char* key) const
+{
+    IntegerRef integer{};
+    MUST_BE_GOOD(::getdns_dict_get_int(ptr_, key, &integer.value_));
+    return integer;
+}
+
+template <>
+Data::ListRef Data::DictRef::get<Data::ListRef>(const char* key) const
+{
+    ::getdns_list* list_ptr = nullptr;
+    MUST_BE_GOOD(::getdns_dict_get_list(ptr_, key, &list_ptr));
+    return ListRef{list_ptr};
+}
+
+
+Data::ListRef::ListRef(const ::getdns_list* ptr)
+    : ptr_{ptr}
+{ }
+
+Data::ListRef::ListRef(ListRef&& src) noexcept
+    : ListRef{nullptr}
+{
+    std::swap(src.ptr_, ptr_);
+}
+
+Data::ListRef& Data::ListRef::operator=(ListRef&& src) noexcept
+{
+    std::swap(src.ptr_, ptr_);
+    return *this;
+}
+
+Data::ListRef::operator const ::getdns_list*() const noexcept
+{
+    return ptr_;
+}
+
+std::size_t Data::ListRef::length() const
+{
+    ::size_t length;
+    static_assert(std::is_same<decltype(length), std::size_t>::value);
+    MUST_BE_GOOD(::getdns_list_get_length(ptr_, &length));
+    return length;
+}
+
+template <>
+Data::BinDataRef Data::ListRef::get<Data::BinDataRef>(std::size_t index) const
+{
+    ::getdns_bindata* bindata_ptr = nullptr;
+    MUST_BE_GOOD(::getdns_list_get_bindata(ptr_, index, &bindata_ptr));
+    return BinDataRef{bindata_ptr};
+}
+
+template <>
+Data::DictRef Data::ListRef::get<Data::DictRef>(std::size_t index) const
+{
+    ::getdns_dict* dict_ptr = nullptr;
+    MUST_BE_GOOD(::getdns_list_get_dict(ptr_, index, &dict_ptr));
+    return DictRef{dict_ptr};
+}
+
+template <>
+Data::IntegerRef Data::ListRef::get<Data::IntegerRef>(std::size_t index) const
+{
+    IntegerRef integer{};
+    MUST_BE_GOOD(::getdns_list_get_int(ptr_, index, &integer.value_));
+    return integer;
+}
+
+template <>
+Data::ListRef Data::ListRef::get<Data::ListRef>(std::size_t index) const
+{
+    ::getdns_list* list_ptr = nullptr;
+    MUST_BE_GOOD(::getdns_list_get_list(ptr_, index, &list_ptr));
+    return ListRef{list_ptr};
+}
+
+
+template <>
+const char* get_as<const char*>(const Data::BinDataRef& bindata)
+{
+    const auto* const bindata_ptr = static_cast<const ::getdns_bindata*>(bindata);
+    if ((bindata_ptr != nullptr) &&
+        (bindata_ptr->data != nullptr) &&
+        (0 < bindata_ptr->size) &&
+        (bindata_ptr->data[bindata_ptr->size - 1] == 0))
     {
-        struct DictCreateFailure:Exception
-        {
-            const char* what()const noexcept override { return "Could not create extensions dict"; }
-        };
-        throw DictCreateFailure();
+        return reinterpret_cast<const char*>(bindata_ptr->data);
     }
+    raise<GenericError>(__FILE__, __LINE__);
 }
 
-Data::Dict::Dict(const Dict& _src)
-    : base_ptr_(_src.base_ptr_),
-      parent_(_src.parent_)
+
+Data::BinData::BinData()
 {
+    bindata_.data = nullptr;
+    bindata_.size = 0;
 }
 
-Data::Dict::Dict(Base* _base)
-    : base_ptr_(new ::getdns_dict*(_base), dict_ptr_destroy),
-      parent_(Empty())
+Data::BinData::BinData(const BinData& src)
+    : BinData{reinterpret_cast<const void*>(src.bindata_.data), src.bindata_.size}
+{ }
+
+Data::BinData::BinData(BinData&& src)
+    : BinData{}
 {
+    std::swap(bindata_, src.bindata_);
 }
 
-Data::Dict::Dict(Base* _base, const std::shared_ptr<::getdns_dict*>& _parent)
-    : base_ptr_(new ::getdns_dict*(_base)),
-      parent_(_parent)
+Data::BinData::BinData(const std::string& binary_data)
+    : BinData{reinterpret_cast<const void*>(binary_data.c_str()), binary_data.length()}
+{ }
+
+Data::BinData::BinData(const void* binary_data, std::size_t bytes)
+    : BinData{}
 {
+    bindata_.data = reinterpret_cast<::uint8_t*>(std::malloc(bytes));
+    bindata_.size = bytes;
+    std::memcpy(reinterpret_cast<void*>(bindata_.data), binary_data, bytes);
 }
 
-Data::Dict::Dict(Base* _base, const std::shared_ptr<::getdns_list*>& _parent)
-    : base_ptr_(new ::getdns_dict*(_base)),
-      parent_(_parent)
+Data::BinData::BinData(void* binary_data, std::size_t bytes)
+    : BinData{}
 {
+    bindata_.data = reinterpret_cast<::uint8_t*>(binary_data);
+    bindata_.size = bytes;
+}
+
+Data::BinData::~BinData()
+{
+    std::free(bindata_.data);
+}
+
+Data::BinData& Data::BinData::operator=(BinData&& src)
+{
+    std::swap(bindata_, src.bindata_);
+    return *this;
+}
+
+Data::BinData& Data::BinData::operator=(const BinData& src)
+{
+    return *this = BinData{src.bindata_.data, src.bindata_.size};
+}
+
+Data::BinDataRef Data::BinData::operator*() const noexcept
+{
+    return Data::BinDataRef{&bindata_};
+}
+
+
+Data::Dict::Dict(::getdns_dict* ptr) noexcept
+     : ptr_{ptr}
+{ }
+
+Data::Dict::Dict(Dict&& src) noexcept
+    : Dict{nullptr}
+{
+    std::swap(src.ptr_, ptr_);
+}
+
+Data::Dict& Data::Dict::operator=(Dict&& src) noexcept
+{
+    std::swap(src.ptr_, ptr_);
+    return *this;
 }
 
 Data::Dict::~Dict()
 {
+    ::getdns_dict_destroy(ptr_);
+    ptr_ = nullptr;
 }
 
-Data::Dict& Data::Dict::operator=(const Dict& _src)
+Data::DictRef Data::Dict::operator*() const
 {
-    base_ptr_ = _src.base_ptr_;
-    parent_ = _src.parent_;
+    return Data::DictRef{ptr_};
+}
+
+template <>
+Data::Dict& Data::Dict::set<Data::BinDataRef>(const char* key, const Data::BinDataRef& value)
+{
+    MUST_BE_GOOD(::getdns_dict_set_bindata(ptr_, key, value));
     return *this;
 }
 
-Data::Dict::Keys Data::Dict::get_keys()const
+template <>
+Data::Dict& Data::Dict::set<Data::DictRef>(const char* key, const Data::DictRef& value)
 {
-    ::getdns_list* names_ptr = nullptr;
-    const ::getdns_return_t result = ::getdns_dict_get_names(*base_ptr_, &names_ptr);
-    if (result == ::GETDNS_RETURN_GOOD)
-    {
-        const List names(names_ptr);//the list has to be freed, I'm not its parent
-        Keys keys;
-        const std::size_t number_of_names = names.get_number_of_items();
-        for (std::size_t idx = 0; idx < number_of_names; ++idx)
-        {
-            const Value name = get<std::string>(names, idx);
-            if (Is(name).of<std::string>().type)
-            {
-                keys.insert(From(name).get_value_of<std::string>());
-            }
-        }
-        return keys;
-    }
-    struct DictGetNamesFailure:Error
-    {
-        DictGetNamesFailure(::getdns_return_t _error_code, const char* _file, int _line)
-            : Error(_error_code, _file, _line)
-        { }
-    };
-    throw DictGetNamesFailure(result, __FILE__, __LINE__);
+    MUST_BE_GOOD(::getdns_dict_set_dict(ptr_, key, value));
+    return *this;
 }
 
-Data::Type Data::Dict::get_data_type_of_item(const char* _key)const
+template <>
+Data::Dict& Data::Dict::set<Data::IntegerRef>(const char* key, const Data::IntegerRef& value)
 {
-    ::getdns_data_type answer;
-    const ::getdns_return_t result = ::getdns_dict_get_data_type(*base_ptr_, _key, &answer);
-    if (result == ::GETDNS_RETURN_GOOD)
-    {
-        switch (answer)
-        {
-            case ::t_dict: return Type::dictionary;
-            case ::t_list: return Type::array;
-            case ::t_int: return Type::integer;
-            case ::t_bindata: return Type::binary;
-        }
-        struct UnexpectedEnumValue:std::logic_error
-        {
-            UnexpectedEnumValue():std::logic_error("Enum value out of range") { }
-        };
-        throw UnexpectedEnumValue();
-    }
-    struct DictGetDataTypeFailure:Error
-    {
-        DictGetDataTypeFailure(::getdns_return_t _error_code, const char* _file, int _line)
-            : Error(_error_code, _file, _line)
-        { }
-    };
-    throw DictGetDataTypeFailure(result, __FILE__, __LINE__);
+    MUST_BE_GOOD(::getdns_dict_set_int(ptr_, key, value));
+    return *this;
 }
 
-Data::Type Data::Dict::get_data_type_of_item(const std::string& _key)const
+template <> Data::Dict& Data::Dict::set<Data::ListRef>(const char* key, const Data::ListRef& value)
 {
-    return this->get_data_type_of_item(_key.c_str());
+    MUST_BE_GOOD(::getdns_dict_set_list(ptr_, key, value));
+    return *this;
 }
 
-std::string Data::Dict::get_pretty_string()const
+
+Data::List::List(::getdns_list* ptr)
+    : ptr_{ptr}
+{ }
+
+Data::List::List(List&& src) noexcept
+    : List{nullptr}
 {
-    struct Deleter
-    {
-        void operator()(char* _str)const { ::free(reinterpret_cast<void*>(_str)); }
-    };
-    return std::string(std::unique_ptr<char, Deleter>(::getdns_pretty_print_dict(*base_ptr_)).get());
+    std::swap(src.ptr_, ptr_);
 }
 
-Data::Dict::Base* Data::Dict::get_base_ptr()
+Data::List& Data::List::operator=(List&& src) noexcept
 {
-    return *base_ptr_;
-}
-
-const Data::Dict::Base* Data::Dict::get_base_ptr()const
-{
-    return *base_ptr_;
-}
-
-Data::LookUpResult Data::Dict::look_up(const char* _key, Type _type)const
-{
-    ::getdns_list* names_ptr = nullptr;
-    const ::getdns_return_t result = ::getdns_dict_get_names(*base_ptr_, &names_ptr);
-    if (result != ::GETDNS_RETURN_GOOD)
-    {
-        struct DictGetNamesFailure:Error
-        {
-            DictGetNamesFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw DictGetNamesFailure(result, __FILE__, __LINE__);
-    }
-    const List names(names_ptr);//the list has to be freed, I'm not its parent
-    const std::size_t number_of_names = names.get_number_of_items();
-    for (std::size_t idx = 0; idx < number_of_names; ++idx)
-    {
-        const Value item_name = get<std::string>(names, idx);
-        if (Is(item_name).of<std::string>().type)
-        {
-            if (From(item_name).get_value_of<std::string>() == _key)
-            {
-                const bool is_of_requested_type = this->get_data_type_of_item(_key) == _type;
-                return is_of_requested_type ? LookUpResult::success : LookUpResult::different_type;
-            }
-        }
-    }
-    return LookUpResult::not_found;
-}
-
-Data::Dict Data::Dict::get_trust_anchor(
-        const std::string& _zone,
-        std::uint16_t _flags,
-        std::uint8_t _protocol,
-        std::uint8_t _algorithm,
-        const Binary& _public_key)
-{
-    GetDns::Data::Dict anchor;
-    GetDns::Data::set_item_of(anchor, "class", static_cast<std::uint32_t>(GETDNS_RRCLASS_IN));
-    {
-        struct DnsName
-        {
-            static auto from_fqdn(const std::string& _fqdn)
-            {
-                ::getdns_bindata* bin_data_ptr;
-                const ::getdns_return_t result = ::getdns_convert_fqdn_to_dns_name(_fqdn.c_str(), &bin_data_ptr);
-                if (result != ::GETDNS_RETURN_GOOD)
-                {
-                    struct ConversionFailure:Error
-                    {
-                        ConversionFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                            : Error(_error_code, _file, _line)
-                        { }
-                    };
-                    throw ConversionFailure(result, __FILE__, __LINE__);
-                }
-                struct Deleter
-                {
-                    void operator()(::getdns_bindata* _data_ptr)const
-                    {
-                        if (_data_ptr != nullptr)
-                        {
-                            ::free(_data_ptr->data);
-                            _data_ptr->data = nullptr;
-                            ::free(_data_ptr);
-                        }
-                    }
-                };
-                return std::unique_ptr<::getdns_bindata, Deleter>(bin_data_ptr);
-            }
-        };
-        const auto zone = DnsName::from_fqdn(_zone);
-        GetDns::Data::set_item_of(anchor, "name", const_cast<const ::getdns_bindata*>(zone.get()));
-    }
-    GetDns::Data::set_item_of(anchor, "type", static_cast<std::uint32_t>(GETDNS_RRTYPE_DNSKEY));
-    constexpr auto two_days_in_seconds = 2 * 24 * 3600;
-    GetDns::Data::set_item_of(anchor, "ttl", static_cast<std::uint32_t>(two_days_in_seconds));
-    GetDns::Data::Dict rdata;
-    GetDns::Data::set_item_of(rdata, "flags", static_cast<std::uint32_t>(_flags));
-    GetDns::Data::set_item_of(rdata, "protocol", static_cast<std::uint32_t>(_protocol));
-    GetDns::Data::set_item_of(rdata, "algorithm", static_cast<std::uint32_t>(_algorithm));
-    ::getdns_bindata public_key;
-    public_key.size = _public_key.get_length();
-    public_key.data = reinterpret_cast<std::uint8_t*>(const_cast<void*>(_public_key.get_binary_data()));
-    GetDns::Data::set_item_of(rdata, "public_key", const_cast<const ::getdns_bindata*>(&public_key));
-    GetDns::Data::set_item_of(anchor, "rdata", const_cast<const GetDns::Data::Dict&>(rdata).get_base_ptr());
-    return anchor;
-}
-
-Data::List::List()
-    : base_ptr_(new ::getdns_list*(::getdns_list_create()), list_ptr_destroy),
-      parent_(Empty())
-{
-    if (*base_ptr_ == nullptr)
-    {
-        struct ListCreateFailure:Exception
-        {
-            const char* what()const noexcept override { return "Could not create extensions list"; }
-        };
-        throw ListCreateFailure();
-    }
-}
-
-Data::List::List(const List& _src)
-    : base_ptr_(_src.base_ptr_),
-      parent_(_src.parent_)
-{
-}
-
-Data::List::List(Base* _base)
-    : base_ptr_(new ::getdns_list*(_base), list_ptr_destroy),
-      parent_(Empty())
-{
-}
-
-Data::List::List(Base* _base, const std::shared_ptr<::getdns_dict*>& _parent)
-    : base_ptr_(new ::getdns_list*(_base)),
-      parent_(_parent)
-{
-}
-
-Data::List::List(Base* _base, const std::shared_ptr<::getdns_list*>& _parent)
-    : base_ptr_(new ::getdns_list*(_base)),
-      parent_(_parent)
-{
+    std::swap(src.ptr_, ptr_);
+    return *this;
 }
 
 Data::List::~List()
 {
+    ::getdns_list_destroy(ptr_);
+    ptr_ = nullptr;
 }
 
-Data::List& Data::List::operator=(const List& _src)
+std::size_t Data::List::length() const
 {
-    base_ptr_ = _src.base_ptr_;
-    parent_ = _src.parent_;
+    ::size_t length;
+    static_assert(std::is_same<decltype(length), std::size_t>::value);
+    MUST_BE_GOOD(::getdns_list_get_length(ptr_, &length));
+    return length;
+}
+
+Data::ListRef Data::List::operator*() const
+{
+    return Data::ListRef{ptr_};
+}
+
+Data::List::operator ::getdns_list*() noexcept
+{
+    return ptr_;
+}
+
+template <>
+Data::List& Data::List::set<Data::BinDataRef>(std::size_t index, const Data::BinDataRef& value)
+{
+    MUST_BE_GOOD(::getdns_list_set_bindata(ptr_, index, value));
     return *this;
 }
 
-std::size_t Data::List::get_number_of_items()const
+template <>
+Data::List& Data::List::set<Data::DictRef>(std::size_t index, const Data::DictRef& value)
 {
-    ::size_t answer;
-    const ::getdns_return_t result = ::getdns_list_get_length(*base_ptr_, &answer);
-    if (result == ::GETDNS_RETURN_GOOD)
-    {
-        return answer;
-    }
-    struct ListGetLengthFailure:Error
-    {
-        ListGetLengthFailure(::getdns_return_t _error_code, const char* _file, int _line)
-            : Error(_error_code, _file, _line)
-        { }
-    };
-    throw ListGetLengthFailure(result, __FILE__, __LINE__);
+    MUST_BE_GOOD(::getdns_list_set_dict(ptr_, index, value));
+    return *this;
 }
 
-Data::Type Data::List::get_data_type_of_item(::size_t _index)const
+template <>
+Data::List& Data::List::set<Data::IntegerRef>(std::size_t index, const Data::IntegerRef& value)
 {
-    ::getdns_data_type answer;
-    const ::getdns_return_t result = ::getdns_list_get_data_type(*base_ptr_, _index, &answer);
-    if (result == ::GETDNS_RETURN_GOOD)
-    {
-        switch (answer)
-        {
-            case ::t_dict: return Type::dictionary;
-            case ::t_list: return Type::array;
-            case ::t_int: return Type::integer;
-            case ::t_bindata: return Type::binary;
-        }
-        struct UnexpectedEnumValue:std::logic_error
-        {
-            UnexpectedEnumValue():std::logic_error("Enum value out of range") { }
-        };
-        throw UnexpectedEnumValue();
-    }
-    struct ListGetDataTypeFailure:Error
-    {
-        ListGetDataTypeFailure(::getdns_return_t _error_code, const char* _file, int _line)
-            : Error(_error_code, _file, _line)
-        { }
-    };
-    throw ListGetDataTypeFailure(result, __FILE__, __LINE__);
+    MUST_BE_GOOD(::getdns_list_set_int(ptr_, index, value));
+    return *this;
 }
 
-Data::LookUpResult Data::List::look_up(::size_t _index, Type _type)const
+template <>
+Data::List& Data::List::set<Data::ListRef>(std::size_t index, const Data::ListRef& value)
 {
-    const bool index_is_out_of_range = this->get_number_of_items() <= _index;
-    if (index_is_out_of_range)
-    {
-        return LookUpResult::index_out_of_range;
-    }
-    const bool is_of_requested_type = this->get_data_type_of_item(_index) == _type;
-    return is_of_requested_type ? LookUpResult::success : LookUpResult::different_type;
+    MUST_BE_GOOD(::getdns_list_set_list(ptr_, index, value));
+    return *this;
 }
 
-const Data::List::Base* Data::List::get_base_ptr()const
+
+template <>
+Data::List& Data::List::push_back<Data::BinDataRef>(const Data::BinDataRef& value)
 {
-    return *base_ptr_;
+    return this->set(this->length(), value);
 }
 
-Data::List::Base* Data::List::get_base_ptr()
+template <>
+Data::List& Data::List::push_back<Data::DictRef>(const Data::DictRef& value)
 {
-    return *base_ptr_;
+    return this->set(this->length(), value);
 }
 
-Data::List Data::List::get_root_trust_anchor(::time_t& _utc_date_of_anchor)
+template <>
+Data::List& Data::List::push_back<Data::IntegerRef>(const Data::IntegerRef& value)
 {
-    return List(::getdns_root_trust_anchor(&_utc_date_of_anchor));
+    return this->set(this->length(), value);
 }
 
-Data::Binary::Binary()
-    : binary_data_()
+template <>
+Data::List& Data::List::push_back<Data::ListRef>(const Data::ListRef& value)
+{
+    return this->set(this->length(), value);
+}
+
+
+Data::DnsName::DnsName(const char* fqdn)
+    : bindata_{[&](::getdns_bindata** ptr) { MUST_BE_GOOD(::getdns_convert_fqdn_to_dns_name(fqdn, ptr)); }}
 { }
 
-Data::Binary::Binary(const std::string& _binary_data)
-    : binary_data_(_binary_data)
-{ }
+Data::DnsName::~DnsName() noexcept { }
 
-Data::Binary::Binary(const void* _binary_data, std::uint32_t _data_length)
-    : binary_data_(reinterpret_cast<const char*>(_binary_data), _data_length)
-{ }
-
-const void* Data::Binary::get_binary_data()const
+Data::BinDataRef Data::DnsName::operator*() const noexcept
 {
-    return static_cast<const void*>(binary_data_.c_str());
+    return *bindata_;
 }
 
-std::uint32_t Data::Binary::get_length()const
+Data::TrustAnchor::TrustAnchor(const GetDns::TrustAnchor& trust_anchor)
+    : data{[](const GetDns::TrustAnchor& trust_anchor)
+           {
+               const Data::DnsName zone{trust_anchor.zone.c_str()};
+               const auto public_key = base64_decode(trust_anchor.public_key);
+               Data::Dict anchor{::getdns_dict_create()};
+               anchor.set("class", *Data::Integer{GETDNS_RRCLASS_IN});
+               anchor.set("name", *zone);
+               anchor.set("type", *Data::Integer{GETDNS_RRTYPE_DNSKEY});
+               constexpr auto two_days_in_seconds = 2 * 24 * 3600;
+               anchor.set("ttl", *Data::Integer{two_days_in_seconds});
+               GetDns::Data::Dict rdata{::getdns_dict_create()};
+               rdata.set("flags", *Data::Integer{trust_anchor.flags});
+               rdata.set("protocol", *Data::Integer{trust_anchor.protocol});
+               rdata.set("algorithm", *Data::Integer{trust_anchor.algorithm});
+               rdata.set("public_key", *public_key);
+               anchor.set("rdata", *rdata);
+               return anchor;
+           }(trust_anchor)}
+{ }
+
+namespace {
+
+
+}//namespace GetDns::{anonymous}
+
+Data::TrustAnchorList::TrustAnchorList(List data) noexcept
+    : data_{std::move(data)}
+{ }
+
+Data::TrustAnchorList::TrustAnchorList(const std::list<GetDns::TrustAnchor>& list)
+    : data_{::getdns_list_create()}
 {
-    return binary_data_.length();
+    std::for_each(begin(list), end(list), [&](auto&& anchor) { data_.push_back(*TrustAnchor{anchor}.data); });
+}
+
+Data::TrustAnchorList::TrustAnchorList(const TrustAnchorList& src)
+    : data_{::getdns_list_create()}
+{
+    const auto number_of_anchors = src.data_.length();
+    for (std::size_t idx = 0; idx < number_of_anchors; ++idx)
+    {
+        const auto anchor = (*src.data_).get<DictRef>(idx);
+        data_.push_back(anchor);
+    }
+}
+
+Data::TrustAnchorList::TrustAnchorList(TrustAnchorList&& src) noexcept
+    : data_{std::move(src.data_)}
+{ }
+
+Data::TrustAnchorList& Data::TrustAnchorList::operator=(const TrustAnchorList& src)
+{
+    return *this = TrustAnchorList{src};
+}
+
+Data::TrustAnchorList& Data::TrustAnchorList::operator=(TrustAnchorList&& src) noexcept
+{
+    std::swap(data_, src.data_);
+    return *this;
+}
+
+Data::TrustAnchorList::operator ::getdns_list*() noexcept
+{
+    return static_cast<::getdns_list*>(data_);
+}
+
+bool Data::TrustAnchorList::empty() const
+{
+    return data_.length() == 0;
+}
+
+Data::TrustAnchorList get_root_trust_anchor(::time_t& utc_date_of_anchor)
+{
+    return Data::TrustAnchorList{Data::List{::getdns_root_trust_anchor(&utc_date_of_anchor)}};
 }
 
 namespace {
 
-std::string remove_the_base64_padding_characters(const std::string& _with_paddings)
+std::string remove_the_base64_padding_characters(const std::string& with_paddings)
 {
-    const int are_the_same = 0;
-    if (2 <= _with_paddings.length())
+    static constexpr int are_the_same = 0;
+    if (2 <= with_paddings.length())
     {
-        if (_with_paddings.compare(_with_paddings.length() - 2, 2, "==") == are_the_same)
+        if (with_paddings.compare(with_paddings.length() - 2, 2, "==") == are_the_same)
         {
-            return _with_paddings.substr(0, _with_paddings.length() - 2);
+            return with_paddings.substr(0, with_paddings.length() - 2);
         }
     }
-    if (1 <= _with_paddings.length())
+    if (1 <= with_paddings.length())
     {
-        if (_with_paddings.compare(_with_paddings.length() - 1, 1, "=") == are_the_same)
+        if (with_paddings.compare(with_paddings.length() - 1, 1, "=") == are_the_same)
         {
-            return _with_paddings.substr(0, _with_paddings.length() - 1);
+            return with_paddings.substr(0, with_paddings.length() - 1);
         }
     }
-    return _with_paddings;
+    return with_paddings;
 }
 
 }//namespace GetDns::{anonymous}
 
-Data::Binary Data::base64_decode(const std::string& _base64_encoded_text)
+Data::BinData base64_decode(const std::string& base64_encoded_text)
 {
     namespace bai = boost::archive::iterators;
-    typedef bai::transform_width<bai::binary_from_base64<const char*>, 8, 6> Base64Decode;
+    using Base64Decode = bai::transform_width<bai::binary_from_base64<const char*>, 8, 6>;
 
-    const std::string without_paddings = remove_the_base64_padding_characters(_base64_encoded_text);
+    const std::string without_paddings = remove_the_base64_padding_characters(base64_encoded_text);
     std::ostringstream decoded_bin_data;
 
     std::copy(Base64Decode(without_paddings.data()),
               Base64Decode(without_paddings.data() + without_paddings.size()),
               std::ostream_iterator<char>(decoded_bin_data));
-    return Binary(decoded_bin_data.str());
+    return Data::BinData{decoded_bin_data.str()};
 }
 
-std::string Data::base64_encode(const Data::Binary& _raw_data)
+std::string base64_encode(const Data::BinDataRef& raw_data)
 {
-    typedef boost::archive::iterators::base64_from_binary<
-                boost::archive::iterators::transform_width<const char*, 6, 8>> Base64Encode;
+    using Base64Encode = boost::archive::iterators::base64_from_binary<boost::archive::iterators::transform_width<const char*, 6, 8>>;
     std::ostringstream base64_encoded_text;
-    const char* const data_begin = reinterpret_cast<const char*>(_raw_data.get_binary_data());
-    const char* const data_end = data_begin + _raw_data.get_length();
+    const char* const data_begin = reinterpret_cast<const char*>(raw_data.data());
+    const char* const data_end = data_begin + raw_data.size();
     std::copy(Base64Encode(data_begin),
               Base64Encode(data_end),
               std::ostream_iterator<char>(base64_encoded_text));
-    switch (_raw_data.get_length() % 3)
+    switch (raw_data.size() % 3)
     {
         case 0:
             break;
@@ -477,538 +593,7 @@ std::string Data::base64_encode(const Data::Binary& _raw_data)
             base64_encoded_text << "=";
             break;
     }
-    return base64_encoded_text.str();
+    return std::move(base64_encoded_text).str();
 }
-
-namespace {
-
-template <typename T>
-struct ValueIsOf:boost::static_visitor<bool>
-{
-    bool operator()(const T&)const { return true; }
-    template <typename X>
-    bool operator()(const X&)const { return false; }
-};
-
-#undef APPLY_BOOST_1_58_BUG_WORKAROUND
-#ifdef BOOST_VERSION
-#if (105800 <= BOOST_VERSION) && (BOOST_VERSION < 105900)
-//see https://svn.boost.org/trac10/ticket/11285
-#define APPLY_BOOST_1_58_BUG_WORKAROUND
-#endif
-#endif
-
-template <typename T>
-#ifdef APPLY_BOOST_1_58_BUG_WORKAROUND
-struct GetValueOf
-#else
-struct GetValueOf:boost::static_visitor<const T&>
-#endif
-{
-    const T& operator()(const T& _value)const { return _value; }
-    template <typename X>
-    const T& operator()(const X&)const { throw std::runtime_error("unexpected type"); }
-};
-
-}//namespace GetDns::{anonymous}
-
-template <typename T>
-Data::Is::Type Data::Is::of()const
-{
-    return Type(boost::apply_visitor(ValueIsOf<T>(), value_));
-}
-
-template Data::Is::Type Data::Is::of<Data::Dict>()const;
-template Data::Is::Type Data::Is::of<Data::List>()const;
-template Data::Is::Type Data::Is::of<std::uint32_t>()const;
-template Data::Is::Type Data::Is::of<std::string>()const;
-template Data::Is::Type Data::Is::of<Data::Binary>()const;
-template Data::Is::Type Data::Is::of<Data::Fqdn>()const;
-template Data::Is::Type Data::Is::of<boost::asio::ip::address>()const;
-template Data::Is::Type Data::Is::of<Data::NotSet>()const;
-template Data::Is::Type Data::Is::of<Data::NotRequestedType>()const;
-
-template <typename T>
-const T& Data::From::get_value_of()const
-{
-    return boost::apply_visitor(GetValueOf<T>(), value_);
-}
-
-template const Data::Dict& Data::From::get_value_of<Data::Dict>()const;
-template const Data::List& Data::From::get_value_of<Data::List>()const;
-template const Data::Fqdn& Data::From::get_value_of<Data::Fqdn>()const;
-template const std::uint32_t& Data::From::get_value_of<std::uint32_t>()const;
-template const std::string& Data::From::get_value_of<std::string>()const;
-template const Data::Binary& Data::From::get_value_of<Data::Binary>()const;
-template const boost::asio::ip::address& Data::From::get_value_of<boost::asio::ip::address>()const;
-
-namespace {
-
-template <class T> struct TypeTraits { };
-
-template <>
-struct TypeTraits<::getdns_dict*>
-{
-    typedef const char* IndexedByType;
-};
-
-template <>
-struct TypeTraits<::getdns_list*>
-{
-    typedef ::size_t IndexedByType;
-};
-
-template <class W, class F, class B>
-::getdns_return_t get_what_from_by(W* what, const F* from, B by);
-
-template <>
-::getdns_return_t get_what_from_by<::getdns_dict*, ::getdns_dict, const char*>(
-        ::getdns_dict** what,
-         const ::getdns_dict* from,
-         const char* by)
-{
-    return ::getdns_dict_get_dict(from, by, what);
-}
-
-template <>
-::getdns_return_t get_what_from_by<::getdns_list*, ::getdns_dict, const char*>(
-        ::getdns_list** what,
-         const ::getdns_dict* from,
-         const char* by)
-{
-    return ::getdns_dict_get_list(from, by, what);
-}
-
-template <>
-::getdns_return_t get_what_from_by<::getdns_bindata*, ::getdns_dict, const char*>(
-        ::getdns_bindata** what,
-         const ::getdns_dict* from,
-         const char* by)
-{
-    return ::getdns_dict_get_bindata(from, by, what);
-}
-
-template <>
-::getdns_return_t get_what_from_by<std::uint32_t, ::getdns_dict, const char*>(
-        std::uint32_t* what,
-         const ::getdns_dict* from,
-         const char* by)
-{
-    return ::getdns_dict_get_int(from, by, what);
-}
-
-template <>
-::getdns_return_t get_what_from_by<::getdns_dict*, ::getdns_list, ::size_t>(
-        ::getdns_dict** what,
-         const ::getdns_list* from,
-         ::size_t by)
-{
-    return ::getdns_list_get_dict(from, by, what);
-}
-
-template <>
-::getdns_return_t get_what_from_by<::getdns_list*, ::getdns_list, ::size_t>(
-        ::getdns_list** what,
-         const ::getdns_list* from,
-         ::size_t by)
-{
-    return ::getdns_list_get_list(from, by, what);
-}
-
-template <>
-::getdns_return_t get_what_from_by<::getdns_bindata*, ::getdns_list, ::size_t>(
-        ::getdns_bindata** what,
-         const ::getdns_list* from,
-         ::size_t by)
-{
-    return ::getdns_list_get_bindata(from, by, what);
-}
-
-template <>
-::getdns_return_t get_what_from_by<std::uint32_t, ::getdns_list, ::size_t>(
-        std::uint32_t* what,
-         const ::getdns_list* from,
-         ::size_t by)
-{
-    return ::getdns_list_get_int(from, by, what);
-}
-
-template <typename T>
-struct ConvertibleInto
-{
-    static const Data::Type from = Data::Type::binary;
-};
-
-template <>
-struct ConvertibleInto<Data::Dict>
-{
-    static const Data::Type from = Data::Type::dictionary;
-};
-
-template <>
-struct ConvertibleInto<Data::List>
-{
-    static const Data::Type from = Data::Type::array;
-};
-
-template <>
-struct ConvertibleInto<std::uint32_t>
-{
-    static const Data::Type from = Data::Type::integer;
-};
-
-template <class R, class S, class K>
-Data::LookUpResult look_up(const S& _parent, K _key)
-{
-    return _parent.look_up(_key, ConvertibleInto<R>::from);
-}
-
-template <class R, class S>
-Data::LookUpResult look_up(const S& _parent, std::string _key)
-{
-    return look_up<R>(_parent, _key.c_str());
-}
-
-}//namespace GetDns::{anonymous}
-
-template <class R, class S, class K> struct GetItem { };
-
-template <class R, class S>
-struct GetItem<R, S, typename TypeTraits<typename S::Base*>::IndexedByType>
-{
-    typedef R Result;
-    typedef S Source;
-    typedef typename TypeTraits<typename Source::Base*>::IndexedByType Index;
-    static Result from(const typename Source::SharedBasePtr& _parent, Index _key)
-    {
-        typename Result::Base* item = nullptr;
-        const ::getdns_return_t result = get_what_from_by(&item, *_parent, _key);
-        if (result == ::GETDNS_RETURN_GOOD)
-        {
-            return Result(item, _parent);
-        }
-        throw Error(result, __FILE__, __LINE__);
-    }
-};
-
-template <class S>
-struct GetItem<std::uint32_t, S, typename TypeTraits<typename S::Base*>::IndexedByType>
-{
-    typedef std::uint32_t Result;
-    typedef S Source;
-    typedef typename TypeTraits<typename Source::Base*>::IndexedByType Index;
-    static Result from(const typename Source::SharedBasePtr& _parent, Index _key)
-    {
-        Result item;
-        const ::getdns_return_t result = get_what_from_by(&item, *_parent, _key);
-        if (result == ::GETDNS_RETURN_GOOD)
-        {
-            return item;
-        }
-        throw Error(result, __FILE__, __LINE__);
-    }
-};
-
-template <class S>
-struct GetItem<boost::asio::ip::address, S, typename TypeTraits<typename S::Base*>::IndexedByType>
-{
-    typedef boost::asio::ip::address Result;
-    typedef S Source;
-    typedef typename TypeTraits<typename Source::Base*>::IndexedByType Index;
-    static Result from(const typename Source::SharedBasePtr& _parent, Index _key)
-    {
-        ::getdns_bindata* item = nullptr;
-        const ::getdns_return_t result = get_what_from_by(&item, *_parent, _key);
-        if (result != ::GETDNS_RETURN_GOOD)
-        {
-            throw Error(result, __FILE__, __LINE__);
-        }
-        struct Deleter
-        {
-            void operator()(char* _value)const { ::free(_value); }
-        };
-        const auto ip_address = std::unique_ptr<char, Deleter>(::getdns_display_ip_address(item));
-        if (ip_address != nullptr)
-        {
-            return boost::asio::ip::address::from_string(ip_address.get());
-        }
-        struct ConversionException:Exception
-        {
-            const char* what()const noexcept override { return "Could not convert address to string"; }
-        };
-        throw ConversionException();
-    }
-};
-
-template <class S>
-struct GetItem<std::string, S, typename TypeTraits<typename S::Base*>::IndexedByType>
-{
-    typedef std::string Result;
-    typedef S Source;
-    typedef typename TypeTraits<typename Source::Base*>::IndexedByType Index;
-    static Result from(const typename Source::SharedBasePtr& _parent, Index _key)
-    {
-        ::getdns_bindata* item = nullptr;
-        const ::getdns_return_t result = get_what_from_by(&item, *_parent, _key);
-        if (result != ::GETDNS_RETURN_GOOD)
-        {
-            throw Error(result, __FILE__, __LINE__);
-        }
-        const bool is_empty = item->size <= 0;
-        if (is_empty)
-        {
-            return std::string();
-        }
-        const bool last_character_is_null = item->data[item->size - 1] == static_cast<std::uint8_t>(0);
-        return std::string(
-                reinterpret_cast<const char*>(item->data),
-                item->size - (last_character_is_null ? 1 : 0));
-    }
-};
-
-template <class S>
-struct GetItem<Data::Binary, S, typename TypeTraits<typename S::Base*>::IndexedByType>
-{
-    typedef Data::Binary Result;
-    typedef S Source;
-    typedef typename TypeTraits<typename Source::Base*>::IndexedByType Index;
-    static Result from(const typename Source::SharedBasePtr& _parent, Index _key)
-    {
-        ::getdns_bindata* item = nullptr;
-        const ::getdns_return_t result = get_what_from_by(&item, *_parent, _key);
-        if (result != ::GETDNS_RETURN_GOOD)
-        {
-            throw Error(result, __FILE__, __LINE__);
-        }
-        return Data::Binary(reinterpret_cast<const char*>(item->data), item->size);
-    }
-};
-
-template <class S>
-struct GetItem<Data::Fqdn, S, typename TypeTraits<typename S::Base*>::IndexedByType>
-{
-    typedef Data::Fqdn Result;
-    typedef S Source;
-    typedef typename TypeTraits<typename Source::Base*>::IndexedByType Index;
-    static Result from(const typename Source::SharedBasePtr& _parent, Index _key)
-    {
-        ::getdns_bindata* item = nullptr;
-        {
-            const ::getdns_return_t result = get_what_from_by(&item, *_parent, _key);
-            if (result != ::GETDNS_RETURN_GOOD)
-            {
-                throw Error(result, __FILE__, __LINE__);
-            }
-        }
-        char* fqdn_str = nullptr;
-        const ::getdns_return_t result = ::getdns_convert_dns_name_to_fqdn(item, &fqdn_str);
-        if (result == ::GETDNS_RETURN_GOOD)
-        {
-            struct Deleter
-            {
-                void operator()(char* _value)const { ::free(_value); }
-            };
-            const auto fqdn = std::unique_ptr<char, Deleter>(fqdn_str);
-            Data::Fqdn retval;
-            if (fqdn != nullptr)
-            {
-                retval.value = fqdn.get();
-            }
-            return retval;
-        }
-        struct ConversionException:Error
-        {
-            ConversionException(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw ConversionException(result, __FILE__, __LINE__);
-    }
-};
-
-template <class R>
-struct GetItem<R, Data::Dict, std::string>
-{
-    static R from(const Data::Dict::SharedBasePtr& _parent, const std::string& _key)
-    {
-        return GetItem<R, Data::Dict, const char*>::from(_parent, _key.c_str());
-    }
-};
-
-template <>
-struct SetItem<Data::Dict::SharedBasePtr, const char*, std::uint32_t>
-{
-    static void into(Data::Dict::SharedBasePtr& _dst, const char* _key, std::uint32_t _value)
-    {
-        const ::getdns_return_t result = ::getdns_dict_set_int(*_dst, _key, _value);
-        if (result == ::GETDNS_RETURN_GOOD)
-        {
-            return;
-        }
-        struct DictSetItemFailure:Error
-        {
-            DictSetItemFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw DictSetItemFailure(result, __FILE__, __LINE__);
-    }
-};
-
-template <>
-struct SetItem<Data::Dict::SharedBasePtr, const char*, const ::getdns_bindata*>
-{
-    static void into(Data::Dict::SharedBasePtr& _dst, const char* _key, const ::getdns_bindata* _value)
-    {
-        const ::getdns_return_t result = ::getdns_dict_set_bindata(*_dst, _key, _value);
-        if (result == ::GETDNS_RETURN_GOOD)
-        {
-            return;
-        }
-        struct DictSetItemFailure:Error
-        {
-            DictSetItemFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw DictSetItemFailure(result, __FILE__, __LINE__);
-    }
-};
-
-template <>
-struct SetItem<Data::Dict::SharedBasePtr, const char*, const ::getdns_dict*>
-{
-    static void into(Data::Dict::SharedBasePtr& _dst, const char* _key, const ::getdns_dict* _value)
-    {
-        const ::getdns_return_t result = ::getdns_dict_set_dict(*_dst, _key, _value);
-        if (result == ::GETDNS_RETURN_GOOD)
-        {
-            return;
-        }
-        struct DictSetItemFailure:Error
-        {
-            DictSetItemFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw DictSetItemFailure(result, __FILE__, __LINE__);
-    }
-};
-
-template <>
-struct SetItem<Data::Dict::SharedBasePtr, const char*, const ::getdns_list*>
-{
-    static void into(Data::Dict::SharedBasePtr& _dst, const char* _key, const ::getdns_list* _value)
-    {
-        const ::getdns_return_t result = ::getdns_dict_set_list(*_dst, _key, _value);
-        if (result == ::GETDNS_RETURN_GOOD)
-        {
-            return;
-        }
-        struct DictSetItemFailure:Error
-        {
-            DictSetItemFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw DictSetItemFailure(result, __FILE__, __LINE__);
-    }
-};
-
-template <>
-struct SetItem<Data::Dict::SharedBasePtr, const char*, const char*>
-{
-    static void into(Data::Dict::SharedBasePtr& _dst, const char* _key, const char* _value)
-    {
-        ::getdns_bindata value;
-        value.data = const_cast<std::uint8_t*>(reinterpret_cast<const std::uint8_t*>(_value));
-        value.size = std::strlen(_value) + 1;
-        return SetItem<Data::Dict::SharedBasePtr, const char*, const ::getdns_bindata*>::into(_dst, _key, &value);
-    }
-};
-
-template <>
-struct SetItem<Data::List::SharedBasePtr, ::size_t, const ::getdns_dict*>
-{
-    static void into(Data::List::SharedBasePtr& _dst, ::size_t _index, const ::getdns_dict* _value)
-    {
-        const ::getdns_return_t result = ::getdns_list_set_dict(*_dst, _index, _value);
-        if (result == ::GETDNS_RETURN_GOOD)
-        {
-            return;
-        }
-        struct ListSetDictFailure:Error
-        {
-            ListSetDictFailure(::getdns_return_t _error_code, const char* _file, int _line)
-                : Error(_error_code, _file, _line)
-            { }
-        };
-        throw ListSetDictFailure(result, __FILE__, __LINE__);
-    }
-};
-
-template <class D, class K, class V>
-D& Data::set_item_of(D& _dst, K _index, V _value)
-{
-    SetItem<typename D::SharedBasePtr, K, V>::into(_dst.base_ptr_, _index, _value);
-    return _dst;
-}
-
-template <class R, class S, class K>
-Data::Value Data::get(const S& _src, K _index)
-{
-    const auto look_up_result = look_up<R>(_src, _index);
-    switch (look_up_result)
-    {
-        case Data::LookUpResult::success: return Data::Value(GetItem<R, S, K>::from(_src.base_ptr_, _index));
-        case Data::LookUpResult::index_out_of_range: return Data::Value(Data::NotSet());
-        case Data::LookUpResult::not_found: return Data::Value(Data::NotSet());
-        case Data::LookUpResult::different_type: return Data::Value(Data::NotRequestedType());
-    }
-    struct UnexpectedEnumValue:std::logic_error
-    {
-        UnexpectedEnumValue():std::logic_error("look_up_result out of range") { }
-    };
-    throw UnexpectedEnumValue();
-}
-
-template Data::Value Data::get<Data::Dict, Data::Dict, const char*>(const Data::Dict&, const char*);
-template Data::Value Data::get<Data::Dict, Data::Dict, std::string>(const Data::Dict&, std::string);
-
-template Data::Value Data::get<Data::List, Data::Dict, const char*>(const Data::Dict&, const char*);
-template Data::Value Data::get<Data::List, Data::Dict, std::string>(const Data::Dict&, std::string);
-
-template Data::Value Data::get<std::uint32_t, Data::Dict, const char*>(const Data::Dict&, const char*);
-template Data::Value Data::get<std::uint32_t, Data::Dict, std::string>(const Data::Dict&, std::string);
-
-template Data::Value Data::get<boost::asio::ip::address, Data::Dict, const char*>(const Data::Dict&, const char*);
-template Data::Value Data::get<boost::asio::ip::address, Data::Dict, std::string>(const Data::Dict&, std::string);
-
-template Data::Value Data::get<std::string, Data::Dict, const char*>(const Data::Dict&, const char*);
-template Data::Value Data::get<std::string, Data::Dict, std::string>(const Data::Dict&, std::string);
-
-template Data::Value Data::get<Data::Binary, Data::Dict, const char*>(const Data::Dict&, const char*);
-template Data::Value Data::get<Data::Binary, Data::Dict, std::string>(const Data::Dict&, std::string);
-
-template Data::Value Data::get<Data::Fqdn, Data::Dict, const char*>(const Data::Dict&, const char*);
-template Data::Value Data::get<Data::Fqdn, Data::Dict, std::string>(const Data::Dict&, std::string);
-
-
-template Data::Value Data::get<Data::Dict, Data::List, ::size_t>(const Data::List&, ::size_t);
-template Data::Value Data::get<Data::List, Data::List, ::size_t>(const Data::List&, ::size_t);
-template Data::Value Data::get<std::uint32_t, Data::List, ::size_t>(const Data::List&, ::size_t);
-template Data::Value Data::get<boost::asio::ip::address, Data::List, ::size_t>(const Data::List&, ::size_t);
-template Data::Value Data::get<std::string, Data::List, ::size_t>(const Data::List&, ::size_t);
-template Data::Value Data::get<Data::Binary, Data::List, ::size_t>(const Data::List&, ::size_t);
-template Data::Value Data::get<Data::Fqdn, Data::List, ::size_t>(const Data::List&, ::size_t);
-
-
-template Data::Dict& Data::set_item_of<Data::Dict, const char*, std::uint32_t>(Data::Dict&, const char*, std::uint32_t);
-template Data::Dict& Data::set_item_of<Data::Dict, const char*, const ::getdns_bindata*>(Data::Dict&, const char*, const ::getdns_bindata*);
-template Data::Dict& Data::set_item_of<Data::Dict, const char*, const ::getdns_dict*>(Data::Dict&, const char*, const ::getdns_dict*);
-template Data::Dict& Data::set_item_of<Data::Dict, const char*, const ::getdns_list*>(Data::Dict&, const char*, const ::getdns_list*);
-template Data::Dict& Data::set_item_of<Data::Dict, const char*, const char*>(Data::Dict&, const char*, const char*);
-
-template Data::List& Data::set_item_of<Data::List, ::size_t, const ::getdns_dict*>(Data::List&, ::size_t, const ::getdns_dict*);
 
 }//namespace GetDns

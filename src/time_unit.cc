@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2018  CZ.NIC, z. s. p. o.
+ * Copyright (C) 2017-2021  CZ.NIC, z. s. p. o.
  *
  * This file is part of FRED.
  *
@@ -16,66 +16,81 @@
  * You should have received a copy of the GNU General Public License
  * along with FRED.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 #include "src/time_unit.hh"
 
-#include <cerrno>
-#include <cstring>
-#include <stdexcept>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
 
-namespace {
-
-const long long nsecs_in_one_second = 1000000000LL;
-
-}//namespace {anonymous}
 
 namespace TimeUnit {
 
-struct ::timespec get_clock_monotonic()
+Uptime get_uptime()
 {
-    struct ::timespec t;
-    const int retval = ::clock_gettime(CLOCK_MONOTONIC_RAW, &t);
-    const int success = 0;
-    if (retval == success)
-    {
-        return t;
-    }
-    const int c_errno = errno;
-    struct ClockGetTimeFailure:std::runtime_error
-    {
-        ClockGetTimeFailure(const char* _desc):std::runtime_error(_desc) { }
-    };
-    throw ClockGetTimeFailure(std::strerror(c_errno));
+    return Uptime{std::chrono::steady_clock::now().time_since_epoch()};
 }
 
-Nanoseconds::Nanoseconds(const Seconds& sec)
-    : value(nsecs_in_one_second * sec.value)
-{ }
+template <>
+std::ostream& operator<<<std::chrono::seconds::rep, std::chrono::seconds::period>(std::ostream& out, const std::chrono::seconds& t)
+{
+    const auto today = t.count() % std::chrono::duration_cast<std::chrono::seconds>(std::chrono::hours{24}).count();
+    const auto hours = today / std::chrono::duration_cast<std::chrono::seconds>(std::chrono::hours{1}).count();
+    const auto minutes = (today / std::chrono::duration_cast<std::chrono::seconds>(std::chrono::minutes{1}).count()) % 60;
+    const auto seconds = today % 60;
+    std::ostringstream o;
+    o << std::setw(2) << std::setfill(' ') << std::right << hours << ":"
+      << std::setw(2) << std::setfill('0') << std::right << minutes << ":"
+      << std::setw(2) << std::setfill('0') << std::right << seconds;
+    return out << o.str();
+}
+
+template <>
+std::ostream& operator<<<std::chrono::milliseconds::rep, std::chrono::milliseconds::period>(std::ostream& out, const std::chrono::milliseconds& t)
+{
+    const auto today = t.count() % std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours{24}).count();
+    const auto hours = today / std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours{1}).count();
+    const auto minutes = (today / std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::minutes{1}).count()) % 60;
+    const auto seconds = (today / std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds{1}).count()) % 60;
+    const auto milliseconds = today % std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds{1}).count();
+    std::ostringstream o;
+    o << std::setw(2) << std::setfill(' ') << std::right << hours << ":"
+      << std::setw(2) << std::setfill('0') << std::right << minutes << ":"
+      << std::setw(2) << std::setfill('0') << std::right << seconds << "."
+      << std::setw(3) << std::setfill('0') << std::right << milliseconds;
+    return out << o.str();
+}
+
+template <>
+std::ostream& operator<<<std::chrono::microseconds::rep, std::chrono::microseconds::period>(std::ostream& out, const std::chrono::microseconds& t)
+{
+    const auto today = t.count() % std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::hours{24}).count();
+    const auto hours = today / std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::hours{1}).count();
+    const auto minutes = (today / std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::minutes{1}).count()) % 60;
+    const auto seconds = (today / std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::seconds{1}).count()) % 60;
+    const auto microseconds = today % std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::seconds{1}).count();
+    std::ostringstream o;
+    o << std::setw(2) << std::setfill(' ') << std::right << hours << ":"
+      << std::setw(2) << std::setfill('0') << std::right << minutes << ":"
+      << std::setw(2) << std::setfill('0') << std::right << seconds << "."
+      << std::setw(6) << std::setfill('0') << std::right << microseconds;
+    return out << o.str();
+}
+
+template <>
+std::ostream& operator<<<std::chrono::nanoseconds::rep, std::chrono::nanoseconds::period>(std::ostream& out, const std::chrono::nanoseconds& t)
+{
+    const auto today = t.count() % std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours{24}).count();
+    const auto hours = today / std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours{1}).count();
+    const auto minutes = (today / std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes{1}).count()) % 60;
+    const auto seconds = (today / std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds{1}).count()) % 60;
+    const auto nanoseconds = today % std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds{1}).count();
+    std::ostringstream o;
+    o << std::setw(2) << std::setfill(' ') << std::right << hours << ":"
+      << std::setw(2) << std::setfill('0') << std::right << minutes << ":"
+      << std::setw(2) << std::setfill('0') << std::right << seconds << "."
+      << std::setw(9) << std::setfill('0') << std::right << nanoseconds;
+    return out << o.str();
+}
 
 }//namespace TimeUnit
-
-TimeUnit::Nanoseconds operator-(const struct ::timespec& a, const struct ::timespec& b)
-{
-    return TimeUnit::Nanoseconds((nsecs_in_one_second * (a.tv_sec - b.tv_sec)) + a.tv_nsec - b.tv_nsec);
-}
-
-struct ::timespec operator+(const struct ::timespec& a, const TimeUnit::Seconds& b)
-{
-    struct ::timespec sum;
-    sum.tv_sec = a.tv_sec + b.value;
-    sum.tv_nsec = a.tv_nsec;
-    return sum;
-}
-
-struct ::timespec operator+(const struct ::timespec& a, const TimeUnit::Nanoseconds& b)
-{
-    struct ::timespec sum;
-    sum.tv_sec = a.tv_sec + (b.value / nsecs_in_one_second);
-    sum.tv_nsec = a.tv_nsec + (b.value % nsecs_in_one_second);
-    if (nsecs_in_one_second <= sum.tv_nsec)
-    {
-        sum.tv_sec += 1;
-        sum.tv_nsec -= nsecs_in_one_second;
-    }
-    return sum;
-}
-

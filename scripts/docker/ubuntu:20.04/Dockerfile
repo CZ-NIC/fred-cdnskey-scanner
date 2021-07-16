@@ -1,8 +1,5 @@
-FROM ubuntu:16.04
+FROM ubuntu:20.04
 ENV DEBIAN_FRONTEND noninteractive
-
-RUN printf 'deb http://archive.nic.cz/ubuntu xenial main\n' > /etc/apt/sources.list.d/cz.nic.list \
-        && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1C0200016A9AC5C6
 
 RUN apt-get -y update                       \
         && apt-get -y install               \
@@ -15,6 +12,9 @@ RUN apt-get -y update                       \
             libboost-system-dev             \
             libgetdns-dev                   \
             libevent-dev                    \
-            libevent-2.0                    \
+            libssl-dev                      \
+            libidn2-dev                     \
+            libunbound-dev                  \
+            check                           \
         && apt-get -y clean                 \
         && rm -rf /var/lib/apt/lists/*

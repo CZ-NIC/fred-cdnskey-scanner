@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2018  CZ.NIC, z. s. p. o.
+ * Copyright (C) 2017-2021  CZ.NIC, z. s. p. o.
  *
  * This file is part of FRED.
  *
@@ -16,19 +16,19 @@
  * You should have received a copy of the GNU General Public License
  * along with FRED.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 #ifndef INSECURE_CDNSKEY_RESOLVER_HH_E7501EBD49F1AFA724581AA72FFD4314//date "+%s"|md5sum|tr "[a-f]" "[A-F]"
 #define INSECURE_CDNSKEY_RESOLVER_HH_E7501EBD49F1AFA724581AA72FFD4314
 
-#include "src/time_unit.hh"
 
-#include "src/getdns/transport.hh"
-
-#include <string>
-#include <set>
-#include <vector>
+#include "src/getdns/context.hh"
 
 #include <boost/asio/ip/address.hpp>
-#include <boost/optional.hpp>
+
+#include <chrono>
+#include <set>
+#include <string>
+#include <vector>
 
 struct Insecure
 {
@@ -37,15 +37,14 @@ struct Insecure
     boost::asio::ip::address address;
 };
 
-typedef std::vector<Insecure> VectorOfInsecures;
+using VectorOfInsecures = std::vector<Insecure>;
 
 struct InsecureCdnskeyResolver
 {
     static void resolve(
-            const VectorOfInsecures& _to_resolve,
-            const TimeUnit::Seconds& _query_timeout_sec,
-            const boost::optional<GetDns::TransportList>& _transport_list,
-            const TimeUnit::Nanoseconds& _assigned_time_nsec);
+            const VectorOfInsecures& to_resolve,
+            GetDns::Context::Timeout query_timeout,
+            std::chrono::nanoseconds assigned_time);
 };
 
 #endif//INSECURE_CDNSKEY_RESOLVER_HH_E7501EBD49F1AFA724581AA72FFD4314

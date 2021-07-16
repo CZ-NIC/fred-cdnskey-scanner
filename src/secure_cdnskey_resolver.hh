@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2018  CZ.NIC, z. s. p. o.
+ * Copyright (C) 2017-2021  CZ.NIC, z. s. p. o.
  *
  * This file is part of FRED.
  *
@@ -16,32 +16,31 @@
  * You should have received a copy of the GNU General Public License
  * along with FRED.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 #ifndef SECURE_CDNSKEY_RESOLVER_HH_FFBD7215A0403402C6A3E7BDD107973D//date "+%s"|md5sum|tr "[a-f]" "[A-F]"
 #define SECURE_CDNSKEY_RESOLVER_HH_FFBD7215A0403402C6A3E7BDD107973D
 
-#include "src/time_unit.hh"
-
+#include "src/getdns/context.hh"
 #include "src/getdns/data.hh"
-#include "src/getdns/transport.hh"
-
-#include <string>
-#include <set>
-#include <list>
 
 #include <boost/asio/ip/address.hpp>
-#include <boost/optional.hpp>
 
-typedef std::set<std::string> Domains;
+#include <chrono>
+#include <list>
+#include <set>
+#include <string>
+
+
+using Domains = std::set<std::string>;
 
 struct SecureCdnskeyResolver
 {
     static void resolve(
-            const Domains& _to_resolve,
-            const TimeUnit::Seconds& _query_timeout_sec,
-            const boost::optional<GetDns::TransportList>& _transport_list,
-            const std::list<boost::asio::ip::address>& _resolvers,
-            const std::list<GetDns::Data::TrustAnchor>& _trust_anchors,
-            const TimeUnit::Nanoseconds& _assigned_time_nsec);
+            const Domains& to_resolve,
+            GetDns::Context::Timeout query_timeout,
+            const std::list<boost::asio::ip::address>& resolvers,
+            GetDns::Data::TrustAnchorList trust_anchors,
+            std::chrono::nanoseconds assigned_time);
 };
 
 #endif//SECURE_CDNSKEY_RESOLVER_HH_FFBD7215A0403402C6A3E7BDD107973D

@@ -5,9 +5,12 @@ RUN dnf -y install            \
         gcc-c++               \
         make                  \
         cmake                 \
-        getdns-devel          \
         libevent-devel        \
         boost-devel           \
         boost-system          \
+        openssl-devel         \
+        libidn2-devel         \
+        unbound-devel         \
+        check-devel           \
     && dnf clean all          \
     && rm -rf /var/cache/yum

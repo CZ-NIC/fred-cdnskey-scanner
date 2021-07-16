@@ -1,10 +1,11 @@
-FROM fedora:32
+FROM centos:8
 
 RUN dnf -y install            \
         git                   \
-        gcc-c++               \
-        make                  \
         cmake                 \
+        libarchive            \
+        make                  \
+        gcc-c++               \
         libevent-devel        \
         boost-devel           \
         boost-system          \

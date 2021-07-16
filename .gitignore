@@ -56,3 +56,4 @@ tags
 [._]*.un~
 
 cdnskey-scanner
+/3rd_party/
