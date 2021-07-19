@@ -145,7 +145,6 @@ abort_if_headers_not_found(
     boost/algorithm/string.hpp
     boost/algorithm/string/predicate.hpp
     boost/algorithm/string/split.hpp
-    boost/asio/ip/address.hpp
     boost/lexical_cast.hpp
     boost/optional.hpp)
 
