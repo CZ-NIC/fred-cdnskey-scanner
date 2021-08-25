@@ -1,6 +1,13 @@
 ChangeLog
 =========
 
+2021-08-25 (2.0.0)
+------------------
+
+* Major rewrite (update to getdns 1.7.0, fix segfaults)
+* Update and fix spec file for F34 and Centos/RHEL 8
+* Update Gitlab CI
+
 
 2020-12-02 (1.3.3)
 ------------------
