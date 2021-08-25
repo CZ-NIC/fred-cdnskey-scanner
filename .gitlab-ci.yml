@@ -63,37 +63,6 @@ build:centos_8:amd64:
     - web
 
 
-docker:cdnskey-scanner:fedora_32:
-  <<: *image
-  variables:
-    IMAGE_NAME: fedora:32
-    IMAGE_TAG: $CI_REGISTRY_IMAGE/$IMAGE_NAME
-    IMAGE_PATH: scripts/docker/$IMAGE_NAME
-  only:
-    - master
-    - tags
-    - triggers
-    - schedules
-    - web
-
-.fedora_32: &fedora_32
-  image: "$CI_REGISTRY_IMAGE/fedora:32"
-  tags:
-    - amd64
-    - common
-    - linux
-
-build:fedora_32:amd64:
-  <<: *fedora_32
-  <<: *build_job
-  only:
-    - master
-    - tags
-    - triggers
-    - schedules
-    - web
-
-
 docker:cdnskey-scanner:fedora_33:
   <<: *image
   variables:
@@ -116,6 +85,37 @@ docker:cdnskey-scanner:fedora_33:
 
 build:fedora_33:amd64:
   <<: *fedora_33
+  <<: *build_job
+  only:
+    - master
+    - tags
+    - triggers
+    - schedules
+    - web
+
+
+docker:cdnskey-scanner:fedora_34:
+  <<: *image
+  variables:
+    IMAGE_NAME: fedora:34
+    IMAGE_TAG: $CI_REGISTRY_IMAGE/$IMAGE_NAME
+    IMAGE_PATH: scripts/docker/$IMAGE_NAME
+  only:
+    - master
+    - tags
+    - triggers
+    - schedules
+    - web
+
+.fedora_34: &fedora_34
+  image: "$CI_REGISTRY_IMAGE/fedora:34"
+  tags:
+    - amd64
+    - common
+    - linux
+
+build:fedora_34:amd64:
+  <<: *fedora_34
   <<: *build_job
   only:
     - master
