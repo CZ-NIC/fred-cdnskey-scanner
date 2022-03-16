@@ -1,11 +1,10 @@
-FROM centos:8
+FROM fedora:rawhide
 
 RUN dnf -y install            \
         git                   \
-        cmake                 \
-        libarchive            \
-        make                  \
         gcc-c++               \
+        make                  \
+        cmake                 \
         libevent-devel        \
         boost-devel           \
         boost-system          \
