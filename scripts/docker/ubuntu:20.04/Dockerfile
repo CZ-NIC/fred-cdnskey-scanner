@@ -10,7 +10,6 @@ RUN apt-get -y update                       \
             bash-completion                 \
             git                             \
             libboost-system-dev             \
-            libgetdns-dev                   \
             libevent-dev                    \
             libssl-dev                      \
             libidn2-dev                     \
